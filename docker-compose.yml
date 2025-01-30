@@ -1,0 +1,22 @@
+version: "3.8"
+services:
+  controller:
+    build:
+      context: ./controller
+    image: controller_image:latest
+    container_name: controller
+    environment:
+      - CONFIG_FILE=/strategies/strategies.json
+    volumes:
+      - ./strategies:/strategies:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+    command: python controller.py
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"
