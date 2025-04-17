@@ -9,22 +9,31 @@ client = MongoClient('mongodb://localhost:27017/')
 db = client['multikline_poc']
 
 # 測試幣種
-SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT',
-           'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'MATICUSDT', 'LTCUSDT']
+SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'BIGTIMEUSDT',
+              'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'VINEUSDT', 'FARTCOINUSDT', 'ARKUSDT', 'ALCHUSDT']
+
 INTERVAL = '1m'
 
 def calculate_metrics(kline):
+    """計算 CVD 和 volume"""
     try:
-        high = float(kline['h'])
-        taker_buy_quote = float(kline['Q'])
-        taker_buy_base = float(kline['V'])
-        trade_num = float(kline['n'])
+        high = float(kline['h'])  # 最高價
+        taker_buy_quote = float(kline['Q'])  # 主動買入報價資產量
+        quote_asset = float(kline['q'])  # 報價資產量
+        close_price = float(kline['c'])  # 收盤價
+        volume = float(kline['v'])  # 總交易量
+        # 避免除以零
         if high == 0:
-            return 0, 0
-        cvd = taker_buy_quote - taker_buy_base / high
-        volume = trade_num / high
+            cvd = 0
+            volume = 0
+        else:
+            # (Q -q) / c
+            cvd = (taker_buy_quote - quote_asset) / close_price
+            #volume = trade_num / high
     except (ValueError, KeyError):
-        cvd, volume = 0, 0
+        cvd = 0
+        volume = 0
+    
     return cvd, volume
 
 async def binance_kline(symbols, interval, market_type):

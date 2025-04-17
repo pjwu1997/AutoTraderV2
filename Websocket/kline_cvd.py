@@ -13,16 +13,17 @@ def calculate_metrics(kline):
     try:
         high = float(kline['h'])  # 最高價
         taker_buy_quote = float(kline['Q'])  # 主動買入報價資產量
-        taker_buy_base = float(kline['V'])  # 主動買入基礎資產量
-        trade_num = float(kline['n'])  # 交易次數
-        
+        quote_asset = float(kline['q'])  # 報價資產量
+        close_price = float(kline['c'])  # 收盤價
+        volume = float(kline['v'])  # 總交易量
         # 避免除以零
         if high == 0:
             cvd = 0
             volume = 0
         else:
-            cvd = taker_buy_quote - taker_buy_base / high
-            volume = trade_num / high
+            # (Q -q) / c
+            cvd = (taker_buy_quote - quote_asset) / close_price
+            #volume = trade_num / high
     except (ValueError, KeyError):
         cvd = 0
         volume = 0
@@ -48,7 +49,7 @@ async def binance_kline(symbol, interval, market_type):
             
             # 計算 CVD 和 volume
             cvd, volume = calculate_metrics(kline)
-            
+            print(f"{timestamp} {market_type} {data}")
             # 準備存入的資料
             kline_data = {
                 'open': kline['o'],

@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 socket = 'wss://fstream.binance.com/ws/!forceOrder@arr'
 
 # 幣種設定
-set_ticker = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT',
-              'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'MATICUSDT', 'LTCUSDT']
+set_ticker = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'BIGTIMEUSDT',
+              'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'VINEUSDT', 'FARTCOINUSDT', 'ARKUSDT', 'ALCHUSDT']
 
 # MongoDB 設定
 client = MongoClient('mongodb://localhost:27017/')
@@ -54,6 +54,10 @@ def save_aggregated_data():
             upsert=True
         )
         print(f"[{symbol}] 更新 {prev_ts}：matched={result.matched_count}, modified={result.modified_count}")
+    # 移除已儲存的數據
+    if symbol in aggregated_data:
+        del aggregated_data[symbol]
+
 
 # WebSocket 處理
 def on_message(ws, message):
@@ -106,7 +110,7 @@ def on_open(ws):
     print("WebSocket 開啟")
 
 # 排程每分鐘儲存
-schedule.every(1).minutes.do(save_aggregated_data)
+schedule.every(20).seconds.do(save_aggregated_data)
 
 def run_scheduler():
     while True:
