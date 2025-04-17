@@ -7,10 +7,10 @@ from pymongo import MongoClient
 import matplotlib.pyplot as plt
 import schedule
 
-from load_markets import load_perpetual_markets_for_binance
+#from load_markets import load_perpetual_markets_for_binance
 
 class DataFetcher:
-    def __init__(self, exchange_name, db_uri="mongodb://localhost:27017/", db_name="trading_data", timeframe="5m"):
+    def __init__(self, exchange_name, db_uri="mongodb://mongo:27017/", db_name="trading_data", timeframe="5m"):
         # Initialize MongoDB connection
         self.client = MongoClient(db_uri)
         self.db = self.client[db_name]
@@ -398,13 +398,13 @@ if __name__ == "__main__":
     fetcher = DataFetcher("binance", timeframe="5m")
     # Test Usage
     fetcher.clean_db()
-    symbols = list(load_perpetual_markets_for_binance().keys())
-    fetcher.run(symbols)
+    #symbols = list(load_perpetual_markets_for_binance().keys())
+    #fetcher.run(symbols)
     # Plot data for the last day
-    # fetcher.run(["BTC/USDT:USDT", "ETH/USDT:USDT"])
+    fetcher.run(["BTC/USDT:USDT", "ETH/USDT:USDT"])
     # fetcher.plot_last_day("BTC/USDT:USDT")
     # Uncomment the following to test fetching or process multiple symbols
     # fetcher.test_fetch("BTC/USDT")
-    # fetcher.run(["BTC/USDT", "ETH/USDT"])
+    #fetcher.run(["BTC/USDT", "ETH/USDT"])
 
 # %%

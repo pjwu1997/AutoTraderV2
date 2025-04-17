@@ -1,4 +1,3 @@
-# %%
 import ccxt
 import time
 from pymongo import MongoClient, errors
@@ -12,15 +11,7 @@ import re
 import pandas as pd
 
 def remove_100_pattern(text):
-    """
-    Remove all patterns of '100*' (where * is all trailing 0s) from the input text.
-    
-    Args:
-        text (str): The input string.
-    
-    Returns:
-        str: The modified string with '100*' patterns removed.
-    """
+    """Remove all patterns of '100*' (where * is all trailing 0s) from the input text."""
     return re.sub(r'1000*', '', text)
 
 def binance_to_ccxt(symbol):
@@ -40,20 +31,11 @@ def binance_to_ccxt(symbol):
         base = symbol[:-3]
         quote = symbol[-3:]
     else:
-        # Fallback for pairs with less common bases/quotes
         base, quote = symbol[:len(symbol)//2], symbol[len(symbol)//2:]
     return f"{base}/{quote}:{quote}"
 
 def timestamp_to_utc(timestamp_ms):
-    """
-    Convert a Unix timestamp in milliseconds to a UTC datetime object.
-
-    Args:
-        timestamp_ms (int): The Unix timestamp in milliseconds.
-
-    Returns:
-        datetime: The corresponding UTC datetime object.
-    """
+    """Convert a Unix timestamp in milliseconds to a UTC datetime object."""
     try:
         utc_time = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
         return utc_time
@@ -61,22 +43,13 @@ def timestamp_to_utc(timestamp_ms):
         raise ValueError("Invalid timestamp format. Expected a Unix timestamp in milliseconds.")
 
 def utc_to_timestamp(utc_time):
-    """
-    Convert a UTC datetime object to a Unix timestamp in milliseconds.
-
-    Args:
-        utc_time (datetime): The UTC datetime object.
-
-    Returns:
-        int: The corresponding Unix timestamp in milliseconds.
-    """
+    """Convert a UTC datetime object to a Unix timestamp in milliseconds."""
     if not isinstance(utc_time, datetime):
         raise ValueError("Input must be a datetime object.")
-    
     return int(utc_time.timestamp() * 1000)
 
 class DataCollector:
-    def __init__(self, exchange_name, db_uri="mongodb://pj:yolo1234@localhost:27017/admin", db_name="trading_data", timeframe="5m"):
+    def __init__(self, exchange_name, db_uri="mongodb://localhost:27017/", db_name="TradingData", timeframe='1m'):
         """Initialize MongoDB connection and exchange."""
         self.client = MongoClient(db_uri)
         self.db = self.client[db_name]
@@ -94,17 +67,17 @@ class DataCollector:
             '15m': 15 * 60 * 1000,
             '30m': 30 * 60 * 1000,
             '1h': 60 * 60 * 1000,
-            '3h': 3 * 60 * 60 * 1000,
-            '6h': 6 * 60 * 60 * 1000,
-            '12h': 12 * 60 * 60 * 1000,
-            '1d': 24 * 60 * 60 * 1000
+            '3h': 3 * 60 * 1000,
+            '6h': 6 * 60 * 1000,
+            '12h': 12 * 60 * 1000,
+            '1d': 24 * 60 * 1000
         }
-        return timeframe_map.get(timeframe, 5 * 60 * 1000)  # Default to 5 minutes
+        return timeframe_map.get(timeframe, 5 * 60 * 1000)
 
-    def fetch_ohlcv(self, symbol, start_time, end_time, period='5m', limit=100):
+    def fetch_ohlcv(self, symbol, start_time, end_time, period='1m', limit=100):
         """Fetch OHLCV data directly with start_time and end_time."""
         try:
-            ohlcv = self.exchange.fetch_ohlcv(binance_to_ccxt(symbol), timeframe=self.timeframe, since=start_time, limit=limit)
+            ohlcv = self.exchange.fetch_ohlcv(binance_to_ccxt(symbol), timeframe=period, since=start_time, limit=limit)
             return [
                 {
                     "timestamp": entry[0],
@@ -120,7 +93,7 @@ class DataCollector:
             print(f"Error fetching OHLCV for {symbol}: {e}")
             return []
 
-    def get_spot_cvd(self, symbol, start_time, end_time, period='5m', limit=100):
+    def get_spot_cvd(self, symbol, start_time, end_time, period='1m', limit=100):
         """Fetch Spot CVD data."""
         url = "https://api.binance.com/api/v3/klines"
         try:
@@ -144,7 +117,7 @@ class DataCollector:
             print(f"Error fetching Spot CVD for {symbol}: {e}")
             return []
 
-    def get_future_cvd(self, symbol, start_time, end_time, period='5m', limit=100):
+    def get_future_cvd(self, symbol, start_time, end_time, period='1m', limit=100):
         """Fetch Future CVD data."""
         url = "https://fapi.binance.com/fapi/v1/klines"
         try:
@@ -173,8 +146,8 @@ class DataCollector:
         except Exception as e:
             print(f"Error fetching Future CVD for {symbol}: {e}")
             return []
-    
-    def get_premium_index(self, symbol, start_time, end_time, period='5m', limit=100):
+
+    def get_premium_index(self, symbol, start_time, end_time, period='1m', limit=100):
         """Fetch Premium Index data."""
         url = "https://fapi.binance.com/fapi/v1/premiumIndexKlines"
         try:
@@ -186,7 +159,6 @@ class DataCollector:
                 'interval': period
             }
             response = requests.get(url, params=params).json()
-
             return [
                 {
                     "timestamp": entry[0],
@@ -199,11 +171,10 @@ class DataCollector:
             ]
         except Exception as e:
             print(f"Error fetching Premium Index for {symbol}: {e}")
-            return
+            return []
 
     def fetch_funding_rate(self, symbol):
-        """Fetch funding rate data directly and aggregate it based on the specified timeframe."""
-        """This only applies to fetching current funding, not historical."""
+        """Fetch funding rate data directly."""
         if not self.exchange.has.get("fetchFundingRate", False):
             print(f"{self.exchange.id} does not support funding rate fetching.")
             return []
@@ -218,12 +189,10 @@ class DataCollector:
             return []
 
     def fetch_open_interest(self, symbol, start_time, end_time, period='5m', limit=100):
-        """
-        Fetch open interest data for the given symbol and time range.
-        """
-        # Example: Replace this with the actual API call for open interest
+        """Fetch open interest data."""
         try:
             response = self.exchange.fetchOpenInterestHistory(binance_to_ccxt(symbol), since=start_time, limit=limit, params={"endTime": end_time, "period": period})
+            print(f"Open interest response: {response}")
             return [
                 {
                     "timestamp": item['timestamp'],
@@ -237,16 +206,18 @@ class DataCollector:
             return []
 
     def fetch_long_short_ratio(self, symbol, start_time, end_time, period='5m', limit=100):
-        """Fetch long-short ratio data directly and aggregate it based on the specified timeframe."""
+        """Fetch long-short ratio data."""
         if not self.exchange.has.get("fetchLongShortRatioHistory", False):
             print(f"{self.exchange.id} does not support long-short ratio fetching.")
             return []
         try:
             response = self.exchange.fetchLongShortRatioHistory(
                 binance_to_ccxt(symbol),
+                period=period,
                 since=start_time, limit=limit,
-                params={"endTime": end_time, "period": period}
+                params={"endTime": end_time}
             )
+            print(f"Long-short ratio response: {response}")
             return [
                 {
                     "timestamp": item['timestamp'],
@@ -265,10 +236,7 @@ class DataCollector:
         return latest_entry["timestamp"] if latest_entry else None
 
     def fetch_and_store_fixed_range(self, symbol, start_time, end_time, online=False):
-        """
-        Fetch and store data for a fixed time range in smaller chunks, including open interest.
-        """
-        # Map timeframe to milliseconds
+        """Fetch and store data for a fixed time range in smaller chunks."""
         period_to_ms = {
             "1m": 60 * 1000,
             "3m": 3 * 60 * 1000,
@@ -276,21 +244,20 @@ class DataCollector:
             "15m": 15 * 60 * 1000,
             "30m": 30 * 60 * 1000,
             "1h": 60 * 60 * 1000,
-            "2h": 2 * 60 * 60 * 1000,
-            "4h": 4 * 60 * 60 * 1000,
-            "1d": 24 * 60 * 60 * 1000,
+            "2h": 2 * 60 * 1000,
+            "4h": 4 * 60 * 1000,
+            "1d": 24 * 60 * 1000,
         }
-        timeframe_ms = period_to_ms.get(self.timeframe, 5 * 60 * 1000)  # Default to 5m if timeframe is missing
-        limit = 300  # Set the limit of candles per request (adjust as necessary)
-
-        # Calculate the maximum range (in milliseconds) for one API call
+        timeframe_ms = period_to_ms.get(self.timeframe, 5 * 60 * 1000)
+        limit = 300
         max_range_ms = timeframe_ms * limit
 
         current_start = start_time
         collection_name = f"{symbol}_{self.timeframe}"
         while current_start < end_time:
-            # Calculate the temporary end time for this chunk
             temp_end_time = min(current_start + max_range_ms, end_time)
+            print(f"Fetching data from {datetime.utcfromtimestamp(current_start / 1000)} " #.fromtimestamp(datetime.timezone.utc)
+                  f"to {datetime.utcfromtimestamp(temp_end_time / 1000)}...")
 
             print(f"[{symbol}] Fetching data from {datetime.utcfromtimestamp(current_start / 1000)} "
                 f"to {datetime.utcfromtimestamp(temp_end_time / 1000)}...")
@@ -302,32 +269,20 @@ class DataCollector:
                 current_start += max_range_ms
                 continue
 
-            # Fetch Spot CVD
             spot_cvd = self.get_spot_cvd(symbol, current_start, temp_end_time, period=self.timeframe, limit=limit)
-
-            # Fetch Future CVD
             future_cvd = self.get_future_cvd(symbol, current_start, temp_end_time, period=self.timeframe, limit=limit)
-
-            # Fetch Long-Short Ratio
             long_short_ratio = self.fetch_long_short_ratio(symbol, current_start, temp_end_time, period=self.timeframe, limit=limit)
-
-            # Fetch Open Interest
+            if not long_short_ratio:
+                print(f"No long-short ratio data found for {symbol} in the specified range.")
             open_interest = self.fetch_open_interest(symbol, current_start, temp_end_time, period=self.timeframe, limit=limit)
-
-            # Fetch Premium Index
             premium_index = self.get_premium_index(symbol, current_start, temp_end_time, period=self.timeframe, limit=limit)
-
-            # Fetch current funding rate if online mode is enabled
             if online:
                 current_funding_rate = self.fetch_funding_rate(symbol)
 
-            # Prepare and insert into MongoDB
             for i, ohlcv_data in enumerate(ohlcv):
                 time_str = datetime.utcfromtimestamp(ohlcv_data["timestamp"] / 1000).strftime('%Y%m%d%H%M%S')
-
                 spot_cvd_data = spot_cvd[i] if i < len(spot_cvd) else None
                 future_cvd_data = future_cvd[i] if i < len(future_cvd) else None
-                # funding_data = funding_rate[i] if i < len(funding_rate) else None
                 long_short_data = long_short_ratio[i] if i < len(long_short_ratio) else None
                 open_interest_data = open_interest[i] if i < len(open_interest) else None
                 premium_index_data = premium_index[i] if i < len(premium_index) else None
@@ -353,6 +308,8 @@ class DataCollector:
                     "long_short_ratio_value": long_short_data["long_short_ratio"] if long_short_data else None,
                     "open_interest_amount": open_interest_data["open_interest_amount"] if open_interest_data else None,
                     "open_interest_value": open_interest_data["open_interest_value"] if open_interest_data else None,
+                    "liquidation_data": {},  # 初始化清算數據
+                    "margin_rate": {},       # 初始化 margin_rate
                     "timestamp": timestamp_to_utc(ohlcv_data["timestamp"]),
                     "input_timestamp": datetime.utcnow()
                 }
@@ -373,11 +330,9 @@ class DataCollector:
                 except errors.DuplicateKeyError:
                     print(f"Data for {symbol} at {time_str} already exists. Skipping insert.")
 
-            # Move to the next chunk
             current_start = temp_end_time
 
         print(f"Completed fetching and storing data for {symbol} from {start_time} to {end_time}.")
-
 
     def fetch_and_store_online(self, symbol):
         """Fetch and store data for online (up-to-the-minute) data, aligned with the timeframe."""
@@ -388,13 +343,10 @@ class DataCollector:
         # Define the time range (start time slightly before the latest timestamp, end time = current time)
         start_time = latest_timestamp - self.timeframe_ms
         end_time = current_time
-
-        # Fetch and store data
         self.fetch_and_store_fixed_range(symbol, start_time, end_time, online=True)
 
     def clean_db(self):
-        # Not used
-        """Clean the database by removing data older than a certain period."""
+        """Clean old records (not used)."""
         cutoff_time = datetime.utcnow() - timedelta(days=30)
         result = self.db['market_data'].delete_many({"timestamp": {"$lt": cutoff_time}})
         print(f"Deleted {result.deleted_count} old records.")
@@ -406,13 +358,13 @@ class DataCollector:
             print(f"Sleeping for {interval} seconds...")
             time.sleep(interval)
 
-    def plot(self, symbol, field="ohlcv_close", timeframe='5m'):
+    def plot(self, symbol, field="ohlcv_close", timeframe='1m'):
         """Plot a selected field from the stored data."""
         collection_name = f"{symbol}_{timeframe}"
-        cursor = self.db[collection_name].find({"symbol": symbol}).sort("ohlcv_timestamp", 1)
+        cursor = self.db[collection_name].find({"symbol": symbol}).sort("timestamp", 1)
         timestamps, values = [], []
         for doc in cursor:
-            timestamps.append(datetime.utcfromtimestamp(doc['ohlcv_timestamp'] / 1000))
+            timestamps.append(doc['timestamp'])
             values.append(doc[field])
 
         plt.figure(figsize=(12, 6))
@@ -423,7 +375,6 @@ class DataCollector:
         plt.legend()
         plt.grid(True)
         plt.show()
-
 
 def test_fetch_vine_usdt():
     # Initialize the data collector for Binance with a 5-minute timeframe
@@ -436,9 +387,7 @@ def test_fetch_vine_usdt():
     # Convert start and end times to timestamps (milliseconds)
     start_timestamp = int(time.mktime(start_date.timetuple()) * 1000)
     end_timestamp = int(time.mktime(end_date.timetuple()) * 1000)
-
-    # Fetch and store data for VINE/USDT for the specified date range
-    collector.fetch_and_store_fixed_range("VINE/USDT", start_timestamp, end_timestamp)
+    collector.fetch_and_store_fixed_range("VINEUSDT", start_timestamp, end_timestamp)
 
 def fetch_binance_futures_pairs():
     """Fetch all Binance futures trading pairs."""
@@ -460,44 +409,25 @@ def test_fetch_all_binance_futures(timeframe='5m'):
     start_date = end_date - timedelta(weeks=4)
     start_timestamp = int(time.mktime(start_date.timetuple()) * 1000)
     end_timestamp = int(time.mktime(end_date.timetuple()) * 1000)
-
-    # Fetch all Binance futures trading pairs
     trading_pairs = fetch_binance_futures_pairs()
     trading_pairs = ['ARPAUSDT']
     # trading_pairs = ['VINEUSDT']
     if not trading_pairs:
         print("No trading pairs fetched.")
         return
-
-    # Fetch and store data for each trading pair
     for pair in trading_pairs:
         print(f"Fetching data for {pair}")
         collector.fetch_and_store_fixed_range(pair, start_timestamp, end_timestamp)
 
 def delete_all_documents(db_uri, db_name, collection_name):
-    """
-    Delete all documents in a MongoDB collection.
-
-    Args:
-        db_uri (str): MongoDB connection URI.
-        db_name (str): Database name.
-        collection_name (str): Collection name.
-    """
+    """Delete all documents in a MongoDB collection."""
     try:
-        # Connect to the MongoDB server
         client = MongoClient(db_uri)
-
-        # Access the database and collection
         db = client[db_name]
         collection = db[collection_name]
-
-        # Delete all documents
         result = collection.delete_many({})
         print(f"Deleted {result.deleted_count} documents from {collection_name}.")
-
-        # Close the connection
         client.close()
-
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -517,19 +447,14 @@ def plot_ticker_status(ticker, start_date, end_date, db_name, period='5m', mongo
     client = MongoClient(mongo_uri)
     db = client[db_name]
     collection = db[collection_name]
-
-    # Query Data
     query = {
         "symbol": ticker,
         "timestamp": {"$gte": start_date, "$lte": end_date}
     }
     data = list(collection.find(query))
-    
     if not data:
         print("No data found for the given date range.")
         return
-
-    # Convert to DataFrame
     df = pd.DataFrame(data)
 
     # Ensure relevant fields are present
@@ -539,12 +464,8 @@ def plot_ticker_status(ticker, start_date, end_date, db_name, period='5m', mongo
         if col not in df.columns:
             print(f"Column '{col}' not found in the data.")
             return
-
-    # Convert timestamp to datetime for plotting
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df.sort_values("timestamp", inplace=True)
-
-    # Convert timestamp to numeric format for candlestick plotting
     df["timestamp_num"] = mdates.date2num(df["timestamp"])
 
     # Filter Relevant Columns
@@ -557,19 +478,15 @@ def plot_ticker_status(ticker, start_date, end_date, db_name, period='5m', mongo
     # Candlestick Chart
     ax0 = axes[0]
     ohlc_data = df[["timestamp_num", "ohlcv_open", "ohlcv_high", "ohlcv_low", "ohlcv_close"]].values
-    candlestick_ohlc(ax0, ohlc_data, width=0.0008, colorup='g', colordown='r')  # Green for up, red for down
+    candlestick_ohlc(ax0, ohlc_data, width=0.0008, colorup='g', colordown='r')
     ax0.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d %H:%M"))
     ax0.set_ylabel("Price (USDT)")
     ax0.set_title(f"{ticker} Price")
     ax0.grid()
-
-    # Plot Spot CVD
     axes[1].plot(df["timestamp"], df["spot_cvd_value"], label="Spot CVD", color="orange")
     axes[1].set_ylabel("Spot CVD")
     axes[1].set_title("Spot CVD")
     axes[1].grid()
-
-    # Plot Future CVD
     axes[2].plot(df["timestamp"], df["future_cvd_value"], label="Future CVD", color="blue")
     axes[2].set_ylabel("Future CVD")
     axes[2].set_title("Future CVD")
@@ -610,6 +527,7 @@ def plot_ticker_status(ticker, start_date, end_date, db_name, period='5m', mongo
     plt.xlabel("Timestamp")
     plt.tight_layout()
     plt.show()
+
 if __name__ == "__main__":
     # pass
     plot_ticker_status(
