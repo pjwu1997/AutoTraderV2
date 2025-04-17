@@ -1,0 +1,3 @@
+time,side,order_type,time_in_force,original_quantity,price,average_price,order_status,last_fill_quantity,accumulated_fill_quantity
+1705879854204,SELL,LIMIT,IOC,0.003,43058.7,43462.8,FILLED,0.003,0.003
+1705879854204,SELL,LIMIT,IOC,0.003,43058.7,43462.8,FILLED,0.003,0.003
