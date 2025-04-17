@@ -1,3 +1,0 @@
-time,side,order_type,time_in_force,original_quantity,price,average_price,order_status,last_fill_quantity,accumulated_fill_quantity
-1695354959064,BUY,LIMIT,IOC,0.018,26642.1,26642.1,FILLED,0.018,0.018
-1695354959064,BUY,LIMIT,IOC,0.018,26642.1,26642.1,FILLED,0.018,0.018
