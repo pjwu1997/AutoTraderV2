@@ -5,12 +5,13 @@ import atexit
 import time
 from datetime import datetime, timedelta
 from websocket_controller import WebSocketController
+import config
 
 
 class LiquidationWebSocket(WebSocketController):
-    def __init__(self, db_uri="mongodb://localhost:27017/", db_name="multikline_poc", symbols: list = None):
-        super().__init__(db_uri, db_name, symbols)
-        self.socket = "wss://fstream.binance.com/ws/!forceOrder@arr"
+    def __init__(self, symbols: list = None):
+        super().__init__(symbols)
+        self.socket = config.LIQUIDATION_WS_URL
         self.aggregated_data = {symbol: {} for symbol in self.symbols}
         self.ws = None
         self.running = False
@@ -62,7 +63,7 @@ class LiquidationWebSocket(WebSocketController):
             current_time = datetime.utcnow()
             prev_minute = (current_time - timedelta(minutes=1)).replace(second=0, microsecond=0)
             prev_ts = prev_minute
-            cleanup_threshold = int((current_time - timedelta(minutes=5)).timestamp())  # 清理5分鐘前的資料
+            cleanup_threshold = int((current_time - timedelta(minutes=config.LIQUIDATION_CLEANUP_MINUTES)).timestamp())
 
             for symbol in self.symbols:
                 # 儲存前一分鐘的資料
@@ -92,7 +93,7 @@ class LiquidationWebSocket(WebSocketController):
                     f"[{symbol}] 更新 {prev_ts}：matched={result.matched_count}, modified={result.modified_count}"
                 )
 
-                # 清理早於5分鐘的資料
+                # 清理早於指定時間的資料
                 expired_keys = [ts for ts in self.aggregated_data[symbol] if ts < cleanup_threshold]
                 for ts in expired_keys:
                     self.aggregated_data[symbol].pop(ts, None)
@@ -159,21 +160,7 @@ class LiquidationWebSocket(WebSocketController):
 
 
 if __name__ == "__main__":
-    SYMBOLS = [
-        "BTCUSDT",
-        "ETHUSDT",
-        "BNBUSDT",
-        "ADAUSDT",
-        "BIGTIMEUSDT",
-        "DOGEUSDT",
-        "DOTUSDT",
-        "SOLUSDT",
-        "VINEUSDT",
-        "FARTCOINUSDT",
-        "ARKUSDT",
-        "ALCHUSDT",
-    ]
-    ws = LiquidationWebSocket(symbols=SYMBOLS)
+    ws = LiquidationWebSocket()
     try:
         ws.connect()
     except KeyboardInterrupt:

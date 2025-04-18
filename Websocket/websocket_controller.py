@@ -1,13 +1,14 @@
 from abc import ABC, abstractmethod
 from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
+import config
 
 
 class WebSocketController(ABC):
-    def __init__(self, db_uri="mongodb://localhost:27017/", db_name="multikline_poc", symbols: list = None):
-        self.client = MongoClient(db_uri)
-        self.db = self.client[db_name]
-        self.symbols = symbols or []
+    def __init__(self, symbols: list = None):
+        self.client = MongoClient(config.MONGO_URI)
+        self.db = self.client[config.MONGO_DB_NAME]
+        self.symbols = symbols or config.SYMBOLS
         self.collections = {symbol: self.db[symbol] for symbol in self.symbols}
         self.scheduler = BackgroundScheduler()
         self.scheduler.start()

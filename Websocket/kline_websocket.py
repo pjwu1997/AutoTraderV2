@@ -3,19 +3,18 @@ import websockets
 import json
 from datetime import datetime
 from websocket_controller import WebSocketController
+import config
 
 
 class KlineWebSocket(WebSocketController):
-    def __init__(self, db_uri="mongodb://localhost:27017/", db_name="multikline_poc", symbols: list = None, interval: str = "1m"):
-        super().__init__(db_uri, db_name, symbols)
-        self.interval = interval
-        self.spot_uri = (
-            f"wss://stream.binance.com:9443/stream?streams="
-            f"{'/'.join(f'{s.lower()}@kline_{interval}' for s in symbols)}"
+    def __init__(self, symbols: list = None, interval: str = None):
+        super().__init__(symbols)
+        self.interval = interval or config.KLINE_INTERVAL
+        self.spot_uri = config.KLINE_SPOT_WS_URL.format(
+            streams='/'.join(f'{s.lower()}@kline_{self.interval}' for s in self.symbols)
         )
-        self.futures_uri = (
-            f"wss://fstream.binance.com/stream?streams="
-            f"{'/'.join(f'{s.lower()}@kline_{interval}' for s in symbols)}"
+        self.futures_uri = config.KLINE_FUTURES_WS_URL.format(
+            streams='/'.join(f'{s.lower()}@kline_{self.interval}' for s in self.symbols)
         )
 
     def calculate_metrics(self, kline):
@@ -95,19 +94,5 @@ class KlineWebSocket(WebSocketController):
 
 
 if __name__ == "__main__":
-    SYMBOLS = [
-        "BTCUSDT",
-        "ETHUSDT",
-        "BNBUSDT",
-        "ADAUSDT",
-        "BIGTIMEUSDT",
-        "DOGEUSDT",
-        "DOTUSDT",
-        "SOLUSDT",
-        "VINEUSDT",
-        "FARTCOINUSDT",
-        "ARKUSDT",
-        "ALCHUSDT",
-    ]
-    ws = KlineWebSocket(symbols=SYMBOLS)
+    ws = KlineWebSocket()
     asyncio.run(ws.connect())
