@@ -10,8 +10,9 @@ client = MongoClient('mongodb://localhost:27017/')
 db = client['multikline_poc']
 
 # 支援的交易對
-SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'XRPUSDT',
-           'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'MATICUSDT', 'LTCUSDT']
+SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'BIGTIMEUSDT',
+              'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'VINEUSDT', 'FARTCOINUSDT', 'ARKUSDT', 'ALCHUSDT']
+
 
 # Binance API 設定
 API_KEY = 'H95sApwsCkDIUiBxicExq8eVgJIdUsGm7p9mraNwcqNGW2RS6Ryx89TcKZSlV8an'
