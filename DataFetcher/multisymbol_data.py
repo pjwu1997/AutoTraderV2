@@ -13,7 +13,6 @@ db = client['multikline_poc']
 SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'BIGTIMEUSDT',
               'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'VINEUSDT', 'FARTCOINUSDT', 'ARKUSDT', 'ALCHUSDT']
 
-
 # Binance API 設定
 API_KEY = 'H95sApwsCkDIUiBxicExq8eVgJIdUsGm7p9mraNwcqNGW2RS6Ryx89TcKZSlV8an'
 API_SECRET = 'HsQH0Snzaw8LnmhKeWHbEfrPRmrAcUAjgqmR4Ltv1zA6JqjaZfW289Gb8CoUFMBF'
@@ -23,6 +22,7 @@ binance_client = Client(API_KEY, API_SECRET)
 # 全域變數記錄最新 margin fee
 latest_rate = {}  # Changed to dict to store rates for multiple assets
 last_margin_fetch_hour = None
+latest_funding_rate = {}  # 儲存每個 symbol 的最新 funding rate
 
 # 重試機制
 def fetch_with_retries(fetch_func, retries=3, delay=2):
@@ -122,34 +122,57 @@ def fetch_premium_index(symbol: str):
             raise ValueError("Premium Index 回傳空資料")
     return fetch_with_retries(_fetch)
 
+# 取得 Funding Rate 歷史紀錄（僅取最新一筆）
+def fetch_funding_rate(symbol: str):
+    global latest_funding_rate
+    def _fetch():
+        url = "https://fapi.binance.com/fapi/v1/fundingRate"
+        params = {
+            "symbol": symbol,
+            "limit": 1
+        }
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        if data:
+            record = data[0]
+            funding_rate = float(record['fundingRate'])
+            latest_funding_rate[symbol] = funding_rate
+            return {
+                'funding_rate': funding_rate,
+                'timestamp': datetime.utcfromtimestamp(int(record['fundingTime']) / 1000).replace(second=0, microsecond=0)
+            }
+        else:
+            raise ValueError("Funding Rate 回傳空資料")
+    result = fetch_with_retries(_fetch)
+    if result is None and symbol in latest_funding_rate:
+        return {
+            'funding_rate': latest_funding_rate[symbol],
+            'timestamp': datetime.utcnow().replace(second=0, microsecond=0),
+            'is_fallback': True
+        }
+    return result
+
 # 儲存市場資料
 def save_market_data(symbols: List[str]):
     for symbol in symbols:
         open_interest_data = fetch_open_interest(symbol)
         long_short_data = fetch_long_short_ratio(symbol)
         premium_index_data = fetch_premium_index(symbol)
+        funding_rate_data = fetch_funding_rate(symbol)
 
-        # Check if any data fetch failed or is missing required keys
-        if not all([open_interest_data, long_short_data, premium_index_data]):
+        # 檢查資料完整性
+        if not all([open_interest_data, long_short_data, premium_index_data, funding_rate_data]):
             print(f"[警告] 部分資料獲取失敗，跳過 {symbol}")
             continue
-        if 'open_interest' not in open_interest_data:
-            print(f"[錯誤] Open interest 資料缺少 'open_interest' 鍵，跳過 {symbol}: {open_interest_data}")
-            continue
-        if 'long_short_ratio' not in long_short_data:
-            print(f"[錯誤] Long/short ratio 資料缺少 'long_short_ratio' 鍵，跳過 {symbol}: {long_short_data}")
-            continue
-        if 'premium_index' not in premium_index_data:
-            print(f"[錯誤] Premium index 資料缺少 'premium_index' 鍵，跳過 {symbol}: {premium_index_data}")
-            continue
 
-        # 使用 open interest 的 timestamp 作為主時間
         timestamp = open_interest_data['timestamp']
         update_data = {
             'symbol': symbol,
             'open_interest': open_interest_data['open_interest'],
             'long_short_ratio': long_short_data['long_short_ratio'],
-            'premium_index': premium_index_data['premium_index']
+            'premium_index': premium_index_data['premium_index'],
+            'funding_rate': funding_rate_data['funding_rate']
         }
 
         collection = db[symbol]
@@ -163,15 +186,11 @@ def save_market_data(symbols: List[str]):
 
 # 儲存 margin fee（每分鐘執行，但只會每小時更新一次資料）
 def save_spot_margin_fee(symbols: List[str]):
-    # 提取所有基礎資產 (e.g., 'BTC' from 'BTCUSDT')
     base_assets = [symbol.replace('USDT', '') for symbol in symbols]
-    # 將資產列表轉為逗號分隔的字串
     assets_str = ','.join(base_assets)
-    
-    # 批量獲取所有資產的 margin fee
+
     fetch_margin_fee(assets=assets_str)
 
-    # 為每個 symbol 儲存 margin fee
     for symbol in symbols:
         base_asset = symbol.replace('USDT', '')
         if base_asset not in latest_rate or latest_rate[base_asset] is None:
@@ -200,6 +219,6 @@ if __name__ == "__main__":
     while True:
         print(f"\n==== 開始擷取資料 {datetime.utcnow().isoformat()} ====")
         save_market_data(SYMBOLS)
-        save_spot_margin_fee(SYMBOLS)  # 批量處理所有 symbols
+        save_spot_margin_fee(SYMBOLS)
         print("==== 等待下一輪擷取 ====")
-        time.sleep(60)  # 每 60 秒執行一次
+        time.sleep(60)
