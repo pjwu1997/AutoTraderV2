@@ -1,25 +1,23 @@
 import time
 import pytz
 import requests
-import os
 from pymongo import MongoClient
 from datetime import datetime
 from binance.client import Client
 from typing import List
 
-# 從環境變數獲取設定
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
-MONGODB_DB = os.getenv('MONGODB_DB', 'multikline_poc')
-API_KEY = os.getenv('BINANCE_API_KEY', '')
-API_SECRET = os.getenv('BINANCE_API_SECRET', '')
-SYMBOLS = os.getenv('SYMBOLS', 'BTCUSDT,ETHUSDT,BNBUSDT,ADAUSDT,BIGTIMEUSDT,DOGEUSDT,DOTUSDT,SOLUSDT,VINEUSDT,FARTCOINUSDT,ARKUSDT,ALCHUSDT').split(',')
-FETCH_INTERVAL = int(os.getenv('FETCH_INTERVAL', '60'))  # 抓取間隔（秒）
-
 # MongoDB 設定
-client = MongoClient(MONGODB_URI)
-db = client[MONGODB_DB]
+client = MongoClient('mongodb://localhost:27017/')
+db = client['multikline_poc']
+
+# 支援的交易對
+SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'ADAUSDT', 'BIGTIMEUSDT',
+              'DOGEUSDT', 'DOTUSDT', 'SOLUSDT', 'VINEUSDT', 'FARTCOINUSDT', 'ARKUSDT', 'ALCHUSDT']
 
 # Binance API 設定
+API_KEY = 'H95sApwsCkDIUiBxicExq8eVgJIdUsGm7p9mraNwcqNGW2RS6Ryx89TcKZSlV8an'
+API_SECRET = 'HsQH0Snzaw8LnmhKeWHbEfrPRmrAcUAjgqmR4Ltv1zA6JqjaZfW289Gb8CoUFMBF'
+
 binance_client = Client(API_KEY, API_SECRET)
 
 # 全域變數記錄最新 margin fee
@@ -273,18 +271,9 @@ def save_spot_margin_fee_and_market_caps(symbols: List[str]):
 
 # 主程式入口
 if __name__ == "__main__":
-    print(f"\n==== 初始化設定 ====")
-    print(f"MongoDB: {MONGODB_URI}")
-    print(f"Database: {MONGODB_DB}")
-    print(f"Symbols: {SYMBOLS}")
-    print(f"Fetch interval: {FETCH_INTERVAL} seconds")
-    
-    if not API_KEY or not API_SECRET:
-        print("[警告] Binance API 密鑰未設置")
-    
     while True:
         print(f"\n==== 開始擷取資料 {datetime.utcnow().isoformat()} ====")
         save_market_data(SYMBOLS)
         save_spot_margin_fee_and_market_caps(SYMBOLS)
         print("==== 等待下一輪擷取 ====")
-        time.sleep(FETCH_INTERVAL)
+        time.sleep(60)

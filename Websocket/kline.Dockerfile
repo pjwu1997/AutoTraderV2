@@ -6,10 +6,10 @@ WORKDIR /app
 
 # Copy files
 COPY requirements.txt .
-COPY data_fetcher.py .
-
 # Install dependencies
 RUN pip install -r requirements.txt
 
+COPY kline_websocket.py .
+
 # Command to run the fetcher
-CMD ["python", "data_fetcher.py"]
+CMD ["python", "kline_websocket.py"]

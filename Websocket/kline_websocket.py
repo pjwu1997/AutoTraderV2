@@ -69,7 +69,7 @@ class KlineWebSocket(WebSocketController):
                 {"$set": update_data},
                 upsert=True,
             )
-            print(f"[{symbol}] updated {market_type} at {timestamp}")
+            #print(f"[{symbol}] updated {market_type} at {timestamp}")
         except Exception as e:
             print(f"訊息處理錯誤: {e}")
 
