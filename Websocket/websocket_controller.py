@@ -1,22 +1,33 @@
 from abc import ABC, abstractmethod
 from pymongo import MongoClient
 from apscheduler.schedulers.background import BackgroundScheduler
-import config
 import asyncio
 import websockets
-
+import os  # 加入 os
 
 class WebSocketController(ABC):
     def __init__(self, symbols: list = None):
-        self.client = MongoClient(config.MONGO_URI)
-        self.db = self.client[config.MONGO_DB_NAME]
-        self.symbols = symbols or config.SYMBOLS
+        mongo_uri = os.getenv("MONGO_URI")
+        mongo_db_name = os.getenv("MONGO_DB_NAME")
+        symbols_env = os.getenv("SYMBOLS")  # 會讀取一串用逗號分隔的 symbols，例如 "BTCUSDT,ETHUSDT"
+
+        if not mongo_uri or not mongo_db_name:
+            raise ValueError("MONGO_URI 和 MONGO_DB_NAME 必須設置在環境變數中。")
+
+        self.client = MongoClient(mongo_uri)
+        self.db = self.client[mongo_db_name]
+
+        if symbols:
+            self.symbols = symbols
+        elif symbols_env:
+            self.symbols = [s.strip() for s in symbols_env.split(",")]
+        else:
+            raise ValueError("必須提供 symbols 列表或設置 SYMBOLS 環境變數。")
+
         self.collections = {symbol: self.db[symbol] for symbol in self.symbols}
         self.scheduler = BackgroundScheduler()
         self.scheduler.start()
         self.reconnect_interval = 60 * 60 * 23 + 50 * 60  # 23h50m
-
-   
 
     @abstractmethod
     def on_message(self, message, market_type):

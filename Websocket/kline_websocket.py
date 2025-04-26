@@ -1,18 +1,20 @@
 import asyncio
 import json
+import os
 from datetime import datetime
 from websocket_controller import WebSocketController
-import config
 
 
 class KlineWebSocket(WebSocketController):
     def __init__(self, symbols: list = None, interval: str = None):
         super().__init__(symbols)
-        self.interval = interval or config.KLINE_INTERVAL
-        self.spot_uri = config.KLINE_SPOT_WS_URL.format(
+        self.interval = interval or os.getenv("KLINE_INTERVAL", "1m")
+        spot_ws_url = os.getenv("KLINE_SPOT_WS_URL")
+        futures_ws_url = os.getenv("KLINE_FUTURES_WS_URL")
+        self.spot_uri = spot_ws_url.format(
             streams='/'.join(f'{s.lower()}@kline_{self.interval}' for s in self.symbols)
         )
-        self.futures_uri = config.KLINE_FUTURES_WS_URL.format(
+        self.futures_uri = futures_ws_url.format(
             streams='/'.join(f'{s.lower()}@kline_{self.interval}' for s in self.symbols)
         )
 
@@ -79,7 +81,6 @@ class KlineWebSocket(WebSocketController):
 
     def start_scheduler(self, interval_seconds=20):
         pass
-
 
 
 if __name__ == "__main__":

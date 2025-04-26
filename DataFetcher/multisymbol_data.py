@@ -1,5 +1,4 @@
 import time
-import pytz
 import requests
 import os
 from pymongo import MongoClient
@@ -9,7 +8,7 @@ from typing import List
 
 # 從環境變數獲取設定
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
-MONGODB_DB = os.getenv('MONGODB_DB', 'multikline_poc')
+MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'trade_data')
 API_KEY = os.getenv('BINANCE_API_KEY', '')
 API_SECRET = os.getenv('BINANCE_API_SECRET', '')
 SYMBOLS = os.getenv('SYMBOLS', 'BTCUSDT,ETHUSDT,BNBUSDT,ADAUSDT,BIGTIMEUSDT,DOGEUSDT,DOTUSDT,SOLUSDT,VINEUSDT,FARTCOINUSDT,ARKUSDT,ALCHUSDT').split(',')
@@ -17,7 +16,7 @@ FETCH_INTERVAL = int(os.getenv('FETCH_INTERVAL', '60'))  # 抓取間隔（秒）
 
 # MongoDB 設定
 client = MongoClient(MONGODB_URI)
-db = client[MONGODB_DB]
+db = client[MONGO_DB_NAME]
 
 # Binance API 設定
 binance_client = Client(API_KEY, API_SECRET)
@@ -275,7 +274,7 @@ def save_spot_margin_fee_and_market_caps(symbols: List[str]):
 if __name__ == "__main__":
     print(f"\n==== 初始化設定 ====")
     print(f"MongoDB: {MONGODB_URI}")
-    print(f"Database: {MONGODB_DB}")
+    print(f"Database: {MONGO_DB_NAME}")
     print(f"Symbols: {SYMBOLS}")
     print(f"Fetch interval: {FETCH_INTERVAL} seconds")
     
