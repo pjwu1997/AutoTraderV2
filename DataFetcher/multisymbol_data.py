@@ -1,52 +1,83 @@
 import time
 import requests
 import os
+import logging
+import json
+from logging.handlers import RotatingFileHandler
 from pymongo import MongoClient
 from datetime import datetime
 from binance.client import Client
 from typing import List
 
-# 從環境變數獲取設定
-MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        RotatingFileHandler('multisymbol_data.log', maxBytes=10*1024*1024, backupCount=5),  # Rotate logs at 10MB
+        logging.StreamHandler()  # Also print to console
+    ]
+)
+
+logger = logging.getLogger('multisymbol_data')
+
+# Custom JSON formatter for structured logging
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'level': record.levelname,
+            'message': record.msg,
+            'logger': record.name,
+            'symbol': getattr(record, 'symbol', None),  # Add symbol as metadata if available
+            'operation': getattr(record, 'operation', None)  # Add operation type if available
+        }
+        return json.dumps({k: v for k, v in log_entry.items() if v is not None})
+
+# Apply JSON formatter to the console handler
+for handler in logger.handlers:
+    if isinstance(handler, logging.StreamHandler):
+        handler.setFormatter(JsonFormatter())
+
+# Fetch environment variables
+MONGODB_URI = os.getenv('MONGODB_URI', '')
 MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'trade_data')
 API_KEY = os.getenv('BINANCE_API_KEY', '')
 API_SECRET = os.getenv('BINANCE_API_SECRET', '')
-SYMBOLS = os.getenv('SYMBOLS', 'BTCUSDT,ETHUSDT,BNBUSDT,ADAUSDT,BIGTIMEUSDT,DOGEUSDT,DOTUSDT,SOLUSDT,VINEUSDT,FARTCOINUSDT,ARKUSDT,ALCHUSDT').split(',')
-FETCH_INTERVAL = int(os.getenv('FETCH_INTERVAL', '60'))  # 抓取間隔（秒）
+SYMBOLS = os.getenv('SYMBOLS', '').split(',')
+FETCH_INTERVAL = int(os.getenv('FETCH_INTERVAL', '60'))  # Fetch interval in seconds
 
-# MongoDB 設定
+# MongoDB setup
 client = MongoClient(MONGODB_URI)
 db = client[MONGO_DB_NAME]
 
-# Binance API 設定
+# Binance API setup
 binance_client = Client(API_KEY, API_SECRET)
 
-# 全域變數記錄最新 margin fee
-latest_rate = {}  # Changed to dict to store rates for multiple assets
+# Global variables for caching margin fees and market caps
+latest_rate = {}  # Dict to store rates for multiple assets
 last_margin_fetch_hour = None
-latest_funding_rate = {}  # 儲存每個 symbol 的最新 funding rate
-
-# 市值資料緩存變數
+latest_funding_rate = {}  # Store the latest funding rate for each symbol
 LAST_MARKET_CAPS = {}
 LAST_MARKET_CAPS_HOUR = None
 
-# 重試機制
+# Retry mechanism for API calls
 def fetch_with_retries(fetch_func, retries=3, delay=2):
     for attempt in range(retries):
         try:
             return fetch_func()
         except Exception as e:
-            print(f"[錯誤] 第 {attempt+1} 次嘗試失敗: {e}")
+            logger.error(f"Attempt {attempt+1} failed: {e}", extra={'operation': 'fetch_with_retries'})
             time.sleep(delay)
-    print("[錯誤] 所有重試失敗")
+    logger.error("All retry attempts failed", extra={'operation': 'fetch_with_retries'})
     return None
 
-# 每小時從 Binance API 拉一次 Margin Fee
+# Fetch margin fee from Binance API (hourly)
 def fetch_margin_fee(assets: str):
     global latest_rate, last_margin_fetch_hour
     current_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
     if last_margin_fetch_hour == current_hour:
-        return  # 本小時已抓過，略過
+        return  # Skip if already fetched this hour
 
     try:
         rates = binance_client.get_future_hourly_interest_rate(assets=assets, isIsolated=False)
@@ -55,14 +86,14 @@ def fetch_margin_fee(assets: str):
                 asset = rate_info['asset']
                 latest_rate[asset] = float(rate_info['nextHourlyInterestRate'])
             last_margin_fetch_hour = current_hour
-            print(f"[{datetime.now()}] Updated hourly interest rates: {latest_rate}")
+            logger.info(f"Updated hourly interest rates: {latest_rate}", extra={'operation': 'fetch_margin_fee'})
         else:
-            print(f"[{datetime.now()}] Failed to fetch margin fee (empty result)")
+            logger.warning("Failed to fetch margin fee: empty result", extra={'operation': 'fetch_margin_fee'})
 
     except Exception as e:
-        print(f"[{datetime.now()}] Error fetching margin fee: {e}")
+        logger.error(f"Error fetching margin fee: {e}", extra={'operation': 'fetch_margin_fee'})
 
-# 取得 Open Interest
+# Fetch open interest
 def fetch_open_interest(symbol: str):
     def _fetch():
         url = "https://fapi.binance.com/fapi/v1/openInterest"
@@ -76,7 +107,7 @@ def fetch_open_interest(symbol: str):
         }
     return fetch_with_retries(_fetch)
 
-# 取得 Long/Short Ratio
+# Fetch long/short ratio
 def fetch_long_short_ratio(symbol: str):
     def _fetch():
         url = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
@@ -99,10 +130,10 @@ def fetch_long_short_ratio(symbol: str):
                 'timestamp': datetime.utcfromtimestamp(record['timestamp'] / 1000).replace(second=0, microsecond=0)
             }
         else:
-            raise ValueError("Long/Short Ratio 回傳空資料")
+            raise ValueError("Long/Short Ratio returned empty data")
     return fetch_with_retries(_fetch)
 
-# 取得 Premium Index
+# Fetch premium index
 def fetch_premium_index(symbol: str):
     def _fetch():
         url = "https://fapi.binance.com/fapi/v1/premiumIndexKlines"
@@ -125,10 +156,10 @@ def fetch_premium_index(symbol: str):
                 'timestamp': datetime.utcfromtimestamp(record[0] / 1000).replace(second=0, microsecond=0)
             }
         else:
-            raise ValueError("Premium Index 回傳空資料")
+            raise ValueError("Premium Index returned empty data")
     return fetch_with_retries(_fetch)
 
-# 取得 Funding Rate 歷史紀錄（僅取最新一筆）
+# Fetch funding rate history (latest record only)
 def fetch_funding_rate(symbol: str):
     global latest_funding_rate
     def _fetch():
@@ -149,7 +180,7 @@ def fetch_funding_rate(symbol: str):
                 'timestamp': datetime.utcfromtimestamp(int(record['fundingTime']) / 1000).replace(second=0, microsecond=0)
             }
         else:
-            raise ValueError("Funding Rate 回傳空資料")
+            raise ValueError("Funding Rate returned empty data")
     result = fetch_with_retries(_fetch)
     if result is None and symbol in latest_funding_rate:
         return {
@@ -159,11 +190,11 @@ def fetch_funding_rate(symbol: str):
         }
     return result
 
-# 將 Binance 交易對符號轉換為 CoinGecko 符號
+# Convert Binance symbols to CoinGecko symbols
 def convert_to_coingecko_symbols(symbols):
     return [symbol.replace("USDT", "").lower() for symbol in symbols]
 
-# 使用 CoinGecko API 獲取指定符號的市值
+# Fetch market caps using CoinGecko API
 def fetch_market_caps(coingecko_symbols):
     def _fetch():
         symbols_str = ",".join(coingecko_symbols)
@@ -178,28 +209,28 @@ def fetch_market_caps(coingecko_symbols):
         return market_caps
     return fetch_with_retries(_fetch)
 
-# 每小時從 CoinGecko API 拉一次市值數據
+# Fetch market caps from CoinGecko API (hourly)
 def get_market_caps(symbols):
     global LAST_MARKET_CAPS, LAST_MARKET_CAPS_HOUR
     current_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
     if LAST_MARKET_CAPS_HOUR == current_hour:
-        print(f"[{datetime.now()}] 使用緩存市值數據")
-        return LAST_MARKET_CAPS  # 本小時已抓過，使用緩存數據
+        logger.info("Using cached market cap data", extra={'operation': 'get_market_caps'})
+        return LAST_MARKET_CAPS
 
-    print(f"[{datetime.now()}] 新的一小時，查詢 CoinGecko API...")
+    logger.info("Fetching new market cap data from CoinGecko API", extra={'operation': 'get_market_caps'})
     coingecko_symbols = convert_to_coingecko_symbols(symbols)
     market_caps = fetch_market_caps(coingecko_symbols)
-    
+
     if market_caps:
         LAST_MARKET_CAPS = market_caps
         LAST_MARKET_CAPS_HOUR = current_hour
-        print(f"[{datetime.now()}] 更新緩存市值: {market_caps}")
+        logger.info(f"Updated market caps: {market_caps}", extra={'operation': 'get_market_caps'})
     else:
-        print(f"[{datetime.now()}] API 查詢失敗，使用緩存數據（如果存在）")
-    
+        logger.warning("Failed to fetch market caps from API, using cached data if available", extra={'operation': 'get_market_caps'})
+
     return LAST_MARKET_CAPS
 
-# 儲存市場資料
+# Save market data to MongoDB
 def save_market_data(symbols: List[str]):
     for symbol in symbols:
         open_interest_data = fetch_open_interest(symbol)
@@ -207,9 +238,9 @@ def save_market_data(symbols: List[str]):
         premium_index_data = fetch_premium_index(symbol)
         funding_rate_data = fetch_funding_rate(symbol)
 
-        # 檢查資料完整性
+        # Check data integrity
         if not all([open_interest_data, long_short_data, premium_index_data, funding_rate_data]):
-            print(f"[警告] 部分資料獲取失敗，跳過 {symbol}")
+            logger.warning(f"Some data fetching failed, skipping symbol: {symbol}", extra={'symbol': symbol, 'operation': 'save_market_data'})
             continue
 
         timestamp = open_interest_data['timestamp']
@@ -228,62 +259,64 @@ def save_market_data(symbols: List[str]):
             upsert=True
         )
 
-        print(f"[MongoDB] {symbol} 資料已更新: {timestamp}, upserted_id={result.upserted_id}")
+        logger.info(f"Updated market data for symbol {symbol}: timestamp={timestamp}, upserted_id={result.upserted_id}", extra={'symbol': symbol, 'operation': 'save_market_data'})
 
-# 儲存 margin fee 和 market caps（每分鐘執行，但只會每小時更新一次資料）
+# Save spot margin fee and market caps (runs every minute but updates hourly)
 def save_spot_margin_fee_and_market_caps(symbols: List[str]):
     base_assets = [symbol.replace('USDT', '') for symbol in symbols]
     assets_str = ','.join(base_assets)
 
-    # 獲取 margin fee
+    # Fetch margin fee
     fetch_margin_fee(assets=assets_str)
-    
-    # 獲取市值數據（每小時更新一次）
+
+    # Fetch market caps (updated hourly)
     market_caps = get_market_caps(symbols)
-    
+
     timestamp = datetime.utcnow().replace(second=0, microsecond=0)
-    
+
     for symbol in symbols:
         base_asset = symbol.replace('USDT', '')
         update_data = {}
-        
-        # 加入 margin fee 數據（如果有效）
+
+        # Add margin fee data if available
         if base_asset in latest_rate and latest_rate[base_asset] is not None:
             update_data["spot_margin_fee"] = {
                 "dailyInterestRate": latest_rate[base_asset]
             }
         else:
-            print(f"[警告] 尚未抓到 {base_asset} 的有效 margin fee")
-        
-        # 加入市值數據（如果有效）
+            logger.warning(f"No valid margin fee data available for {base_asset}", extra={'symbol': symbol, 'operation': 'save_spot_margin_fee_and_market_caps'})
+
+        # Add market cap data if available
         if market_caps and base_asset in market_caps:
             update_data["market_cap"] = market_caps[base_asset]
-        
-        # 只有在有數據要更新時才進行更新
+
+        # Update only if there is data to save
         if update_data:
             update_data["symbol"] = symbol
             collection = db[symbol]
+            '''
             result = collection.update_one(
                 {"timestamp": timestamp},
                 {"$set": update_data},
                 upsert=True
             )
-            print(f"[MongoDB] {symbol} margin fee 和/或市值已更新: {timestamp}, upserted_id={result.upserted_id}")
+            logger.info(f"Updated margin fee and/or market cap for symbol {symbol}: timestamp={timestamp}, upserted_id={result.upserted_id}", extra={'symbol': symbol, 'operation': 'save_spot_margin_fee_and_market_caps'})
+            '''
 
-# 主程式入口
+# Main program entry
 if __name__ == "__main__":
-    print(f"\n==== 初始化設定 ====")
-    print(f"MongoDB: {MONGODB_URI}")
-    print(f"Database: {MONGO_DB_NAME}")
-    print(f"Symbols: {SYMBOLS}")
-    print(f"Fetch interval: {FETCH_INTERVAL} seconds")
-    
+    logger.info("Initializing configuration", extra={'operation': 'main'})
+    logger.info(f"MongoDB URI: {MONGODB_URI}", extra={'operation': 'main'})
+    logger.info(f"Database: {MONGO_DB_NAME}", extra={'operation': 'main'})
+    logger.info(f"Symbols: {SYMBOLS}", extra={'operation': 'main'})
+    logger.info(f"Fetch interval: {FETCH_INTERVAL} seconds", extra={'operation': 'main'})
+
     if not API_KEY or not API_SECRET:
-        print("[警告] Binance API 密鑰未設置")
-    
+        logger.warning("Binance API key or secret not set", extra={'operation': 'main'})
+
     while True:
-        print(f"\n==== 開始擷取資料 {datetime.utcnow().isoformat()} ====")
+        logger.info(f"Starting data fetch at {datetime.utcnow().isoformat()}", extra={'operation': 'main'})
         save_market_data(SYMBOLS)
         save_spot_margin_fee_and_market_caps(SYMBOLS)
-        print("==== 等待下一輪擷取 ====")
+        logger.info("Waiting for next fetch cycle", extra={'operation': 'main'})
         time.sleep(FETCH_INTERVAL)
