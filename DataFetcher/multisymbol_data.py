@@ -54,12 +54,15 @@ db = client[MONGO_DB_NAME]
 # Binance API setup
 binance_client = Client(API_KEY, API_SECRET)
 
-# Global variables for caching margin fees and market caps
+# Global variables for caching margin fees, market caps, funding rates, and long/short ratio
 latest_rate = {}  # Dict to store rates for multiple assets
 last_margin_fetch_hour = None
 latest_funding_rate = {}  # Store the latest funding rate for each symbol
 LAST_MARKET_CAPS = {}
 LAST_MARKET_CAPS_HOUR = None
+LAST_LONG_SHORT_RATIO = {}  # Store the latest long/short ratio for each symbol
+LAST_LONG_SHORT_TIMESTAMP = {}  # Store the timestamp of the last fetch for each symbol
+LONG_SHORT_CACHE_DURATION = 300  # 5 minutes in seconds
 
 # Retry mechanism for API calls
 def fetch_with_retries(fetch_func, retries=3, delay=2):
@@ -109,6 +112,17 @@ def fetch_open_interest(symbol: str):
 
 # Fetch long/short ratio
 def fetch_long_short_ratio(symbol: str):
+    global LAST_LONG_SHORT_RATIO, LAST_LONG_SHORT_TIMESTAMP
+    
+    # Check if cached data exists and is still valid (less than 5 minutes old)
+    current_time = datetime.utcnow()
+    if symbol in LAST_LONG_SHORT_RATIO and symbol in LAST_LONG_SHORT_TIMESTAMP:
+        time_diff = (current_time - LAST_LONG_SHORT_TIMESTAMP[symbol]).total_seconds()
+        if time_diff < LONG_SHORT_CACHE_DURATION:
+            logger.info(f"Using cached long/short ratio for {symbol}", extra={'symbol': symbol, 'operation': 'fetch_long_short_ratio'})
+            return LAST_LONG_SHORT_RATIO[symbol]
+    
+    # Fetch new data if no valid cache
     def _fetch():
         url = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
         params = {
@@ -121,7 +135,7 @@ def fetch_long_short_ratio(symbol: str):
         data = response.json()
         if data:
             record = data[0]
-            return {
+            result = {
                 'long_short_ratio': {
                     'longShortRatio': float(record['longShortRatio']),
                     'longAccount': float(record['longAccount']),
@@ -129,9 +143,24 @@ def fetch_long_short_ratio(symbol: str):
                 },
                 'timestamp': datetime.utcfromtimestamp(record['timestamp'] / 1000).replace(second=0, microsecond=0)
             }
+            return result
         else:
             raise ValueError("Long/Short Ratio returned empty data")
-    return fetch_with_retries(_fetch)
+    
+    result = fetch_with_retries(_fetch)
+    if result:
+        # Update cache
+        LAST_LONG_SHORT_RATIO[symbol] = result
+        LAST_LONG_SHORT_TIMESTAMP[symbol] = current_time
+        logger.info(f"Fetched new long/short ratio for {symbol}", extra={'symbol': symbol, 'operation': 'fetch_long_short_ratio'})
+    else:
+        # If fetch fails and we have cached data, use it as fallback
+        if symbol in LAST_LONG_SHORT_RATIO:
+            logger.warning(f"Failed to fetch long/short ratio for {symbol}, using cached data", extra={'symbol': symbol, 'operation': 'fetch_long_short_ratio'})
+            return LAST_LONG_SHORT_RATIO[symbol]
+        logger.error(f"No valid long/short ratio data available for {symbol}", extra={'symbol': symbol, 'operation': 'fetch_long_short_ratio'})
+    
+    return result
 
 # Fetch premium index
 def fetch_premium_index(symbol: str):
@@ -301,7 +330,6 @@ def save_spot_margin_fee_and_market_caps(symbols: List[str]):
                 upsert=True
             )
             logger.info(f"Updated margin fee and/or market cap for symbol {symbol}: timestamp={timestamp}, upserted_id={result.upserted_id}", extra={'symbol': symbol, 'operation': 'save_spot_margin_fee_and_market_caps'})
-            
 
 # Main program entry
 if __name__ == "__main__":
