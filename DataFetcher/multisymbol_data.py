@@ -294,14 +294,14 @@ def save_spot_margin_fee_and_market_caps(symbols: List[str]):
         if update_data:
             update_data["symbol"] = symbol
             collection = db[symbol]
-            '''
+            
             result = collection.update_one(
                 {"timestamp": timestamp},
                 {"$set": update_data},
                 upsert=True
             )
             logger.info(f"Updated margin fee and/or market cap for symbol {symbol}: timestamp={timestamp}, upserted_id={result.upserted_id}", extra={'symbol': symbol, 'operation': 'save_spot_margin_fee_and_market_caps'})
-            '''
+            
 
 # Main program entry
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   kline-websocket:
     container_name: kline-websocket
