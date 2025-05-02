@@ -177,13 +177,12 @@ def fetch_premium_index(symbol: str):
         if data:
             record = data[0]
             return {
-                'premium_index': {
-                    'fundingRate': float(record[7]),
-                    'markPrice': float(record[4]),
-                    'indexPrice': float(record[5])
-                },
+                "premium_index": float(record[4]),
                 'timestamp': datetime.utcfromtimestamp(record[0] / 1000).replace(second=0, microsecond=0)
             }
+            
+            
+            
         else:
             raise ValueError("Premium Index returned empty data")
     return fetch_with_retries(_fetch)
