@@ -6,10 +6,12 @@ WORKDIR /app
 
 # Copy files
 COPY requirements.txt .
-COPY data_fetcher.py .
-
 # Install dependencies
 RUN pip install -r requirements.txt
 
+# Copy the Python script
+COPY multisymbol_data.py .
+
+
 # Command to run the fetcher
-CMD ["python", "data_fetcher.py"]
+CMD ["python", "multisymbol_data.py"]

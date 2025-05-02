@@ -1,7 +1,59 @@
-version: "3.8"
 services:
-  mongo:
-    image: mongo:latest
-    container_name: mongo
-    ports:
-      - "27017:27017"
+  kline-websocket:
+    container_name: kline-websocket
+    build:
+      context: ./Websocket
+      dockerfile: kline.Dockerfile
+    networks:
+      - autotrader-vnet
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - SYMBOLS=${SYMBOLS}
+      - KLINE_INTERVAL=${KLINE_INTERVAL}
+      - KLINE_SPOT_WS_URL=${KLINE_SPOT_WS_URL}
+      - KLINE_FUTURES_WS_URL=${KLINE_FUTURES_WS_URL}
+
+  liquidation-websocket:
+    container_name: liquidation-websocket
+    build:
+      context: ./Websocket
+      dockerfile: liquidation.Dockerfile
+    networks:
+      - autotrader-vnet
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - LIQUIDATION_WS_URL=${LIQUIDATION_WS_URL}
+      - LIQUIDATION_CLEANUP_MINUTES=${LIQUIDATION_CLEANUP_MINUTES}
+      - SYMBOLS=${SYMBOLS}
+
+  multisymbol-data:
+    container_name: multisymbol-data
+    build:
+      context: ./DataFetcher
+      dockerfile: multisymbol_data.Dockerfile
+    networks:
+      - autotrader-vnet
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - SYMBOLS=${SYMBOLS}
+      - FETCH_INTERVAL=${FETCH_INTERVAL}
+
+  mongodb:
+      image: mongo:latest
+      container_name: mongodb
+      ports:
+        - "27017:27017"
+      networks:
+        - autotrader-vnet
+
+networks:
+  autotrader-vnet:
+    driver: bridge
