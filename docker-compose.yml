@@ -45,25 +45,26 @@ services:
       - BINANCE_API_SECRET=${BINANCE_API_SECRET}
       - SYMBOLS=${SYMBOLS}
       - FETCH_INTERVAL=${FETCH_INTERVAL}
-
   mongodb:
-      image: mongo:latest
-      container_name: mongodb
-      ports:
-        - "0.0.0.0:27017:27017"
-      networks:
-        - autotrader-vnet
-      environment:
-        - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-        - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-        - MONGO_INITDB_DATABASE=${MONGO_DB_NAME}
-      volumes:
-        - mongodb_data:/data/db
-      restart: unless-stopped
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - autotrader-vnet
+    volumes:
+      - mongo_data:/data/db
+      - ./mongod.conf:/etc/mongod.conf
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    command: ["--config", "/etc/mongod.conf"]
+    restart: unless-stopped
+
 
 networks:
   autotrader-vnet:
     driver: bridge
 
 volumes:
-  mongodb_data:
+  mongo_data:
