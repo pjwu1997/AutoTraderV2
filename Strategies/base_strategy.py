@@ -15,10 +15,16 @@ def fetch_data(symbol, exchange, limit=15000):
     return df
 
 class BaseStrategy:
-    def __init__(self, strategy_name, db_uri="mongodb://pj:yolo1234localhost:27017/", db_name="trading", is_backtest=False, exchange_config=None):
+    def __init__(self, strategy_name, db_uri=None, db_name=None, is_backtest=False, exchange_config=None):
         self.name = strategy_name
         self.running = True
         self.tasks = {}
+        
+        # Use environment variables for database connection
+        import os
+        db_uri = db_uri or os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+        db_name = db_name or os.getenv('MONGO_DB_NAME', 'autotrader')
+        
         self.client = MongoClient(db_uri)
         self.db = self.client[db_name]
         self.state_collection = self.db["strategy_state"]

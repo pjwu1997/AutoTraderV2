@@ -50,10 +50,20 @@ services:
       image: mongo:latest
       container_name: mongodb
       ports:
-        - "27017:27017"
+        - "0.0.0.0:27017:27017"
       networks:
         - autotrader-vnet
+      environment:
+        - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+        - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+        - MONGO_INITDB_DATABASE=${MONGO_DB_NAME}
+      volumes:
+        - mongodb_data:/data/db
+      restart: unless-stopped
 
 networks:
   autotrader-vnet:
     driver: bridge
+
+volumes:
+  mongodb_data:

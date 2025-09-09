@@ -1,4 +1,5 @@
 import time
+import os
 import schedule
 from datetime import datetime, timedelta
 from data_fetcher2 import DataCollector, fetch_binance_futures_pairs  # Ensure this module contains your DataCollector class
@@ -27,8 +28,8 @@ def update_binance_futures(timeframe='5m', max_workers=2):
     """
     collector = DataCollector(
         exchange_name="binance", 
-        db_uri="mongodb://pj:yolo1234@localhost:27017/", 
-        db_name="TradingData", 
+        db_uri=os.getenv('MONGO_URI', 'mongodb://localhost:27017/'), 
+        db_name=os.getenv('MONGO_DB_NAME', 'autotrader'), 
         timeframe=timeframe
     )
     

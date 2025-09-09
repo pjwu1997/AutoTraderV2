@@ -8,7 +8,11 @@ from fastapi import HTTPException
 
 
 class BaseController:
-    def __init__(self, db_uri="mongodb://localhost:27017/", db_name="trading"):
+    def __init__(self, db_uri=None, db_name=None):
+        import os
+        db_uri = db_uri or os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
+        db_name = db_name or os.getenv('MONGO_DB_NAME', 'autotrader')
+        
         self.client = MongoClient(db_uri)
         self.db = self.client[db_name]
         self.strategies = self._load_active_strategies()
