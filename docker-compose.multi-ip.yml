@@ -1,0 +1,123 @@
+# Multi-IP Docker Compose Configuration
+# This file demonstrates how to set up multiple collector instances
+# across different servers/IPs for scaling beyond API rate limits
+
+version: '3.8'
+
+# Template for single IP deployment
+# Copy this file to each server and modify the IP_INDEX and symbol lists
+
+services:
+  # WebSocket collectors can handle ALL symbols (no API limits)
+  kline-websocket-all:
+    container_name: kline-websocket-all
+    build:
+      context: ./Websocket
+      dockerfile: kline.Dockerfile
+    networks:
+      - autotrader-vnet
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - SYMBOLS=${SYMBOLS_ALL}  # All perpetual contracts (~400+ symbols)
+      - KLINE_INTERVAL=${KLINE_INTERVAL}
+      - KLINE_SPOT_WS_URL=${KLINE_SPOT_WS_URL}
+      - KLINE_FUTURES_WS_URL=${KLINE_FUTURES_WS_URL}
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  liquidation-websocket-all:
+    container_name: liquidation-websocket-all
+    build:
+      context: ./Websocket
+      dockerfile: liquidation.Dockerfile
+    networks:
+      - autotrader-vnet
+    restart: unless-stopped
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - LIQUIDATION_WS_URL=${LIQUIDATION_WS_URL}
+      - LIQUIDATION_CLEANUP_MINUTES=${LIQUIDATION_CLEANUP_MINUTES}
+      - SYMBOLS=${SYMBOLS_ALL}  # All symbols for liquidation tracking
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # REST API collector - IP-specific symbol subset
+  multisymbol-data-ip0:
+    container_name: multisymbol-data-ip0
+    build:
+      context: ./DataFetcher
+      dockerfile: multisymbol_data.Dockerfile
+    networks:
+      - autotrader-vnet
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - SYMBOLS=${SYMBOLS_IP0}  # Symbols assigned to this IP
+      - FETCH_INTERVAL=${FETCH_INTERVAL}
+      - IP_INDEX=0
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # MongoDB - shared across all IPs
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "0.0.0.0:27017:27017"
+    networks:
+      - autotrader-vnet
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_DB_NAME}
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Symbol manager service - generates configurations
+  symbol-manager:
+    container_name: symbol-manager
+    build:
+      context: ./DataFetcher
+      dockerfile: Dockerfile.symbol-manager
+    networks:
+      - autotrader-vnet
+    environment:
+      - MONGODB_URI=${MONGO_URI}
+      - MONGO_DB_NAME=${MONGO_DB_NAME}
+      - MAX_SYMBOLS_PER_IP=${MAX_SYMBOLS_PER_IP:-250}
+    volumes:
+      - ./config:/app/config
+    profiles: ["setup"]  # Run only when setting up
+    command: python symbol_manager.py
+
+networks:
+  autotrader-vnet:
+    driver: bridge
+
+volumes:
+  mongodb_data:

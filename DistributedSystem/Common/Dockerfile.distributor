@@ -1,0 +1,33 @@
+FROM python:3.11-slim
+
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
+    curl \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# 設定工作目錄
+WORKDIR /app
+
+# 複製 requirements
+COPY requirements.txt .
+
+# 安裝 Python 依賴
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 複製原始 DataFetcher (用於 SymbolManager)
+COPY ../DataFetcher/ DataFetcher/
+
+# 複製共用程式碼
+COPY models/ models/
+COPY utils/ utils/
+
+# 設定環境變數
+ENV PYTHONPATH="/app:/app/DataFetcher"
+ENV PYTHONUNBUFFERED=1
+
+# 建立配置目錄
+RUN mkdir -p Config/slaves
+
+# 預設執行全量分配器
+CMD ["python", "utils/full_symbol_distributor.py"]

@@ -1,0 +1,110 @@
+# Master VM Docker Compose 配置
+# 部署在協調監控的主機上
+
+version: '3.8'
+
+services:
+  # Master 協調器
+  master-coordinator:
+    build:
+      context: ../../MasterVM
+      dockerfile: Dockerfile
+    container_name: master-coordinator
+    ports:
+      - "8080:8080"  # Master API 端口
+    environment:
+      - MASTER_PORT=8080
+      - MONGO_URI=mongodb://shared-mongo:27017/
+      - MONGO_DB_NAME=trading_data
+      - HEARTBEAT_INTERVAL=30
+      - HEARTBEAT_TIMEOUT=120
+    volumes:
+      - ../../Config/master:/app/config:ro
+      - ../../MasterVM/templates:/app/templates:ro
+    networks:
+      - distributed-net
+    restart: unless-stopped
+    depends_on:
+      - shared-mongo
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # 共享 MongoDB - 所有資料彙整處
+  shared-mongo:
+    image: mongo:7.0
+    container_name: shared-mongo
+    ports:
+      - "0.0.0.0:27017:27017"  # 允許外部連接
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=${MONGO_DB_NAME:-trading_data}
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb.conf:/etc/mongod.conf:ro
+    networks:
+      - distributed-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    command: mongod --config /etc/mongod.conf
+
+  # Redis (用於任務佇列和快取)
+  redis:
+    image: redis:7.2-alpine
+    container_name: distributed-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - distributed-net
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # 全量 Symbol 分配器 (一次性執行)
+  full-symbol-distributor:
+    build:
+      context: ../../Common
+      dockerfile: Dockerfile.distributor
+    container_name: full-symbol-distributor
+    environment:
+      - NUM_SLAVES=${NUM_SLAVES:-5}
+      - MASTER_VM_IP=${MASTER_VM_IP:-master-vm}
+    volumes:
+      - ../../Config:/app/Config
+    networks:
+      - distributed-net
+    profiles: ["setup"]  # 只在設定時執行
+    command: python utils/full_symbol_distributor.py
+
+networks:
+  distributed-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local

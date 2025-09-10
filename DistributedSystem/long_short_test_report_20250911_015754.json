@@ -1,0 +1,56 @@
+{
+  "test_timestamp": "2025-09-11T01:57:54.060058",
+  "summary": {
+    "successful_symbols": 4,
+    "total_symbols": 4,
+    "working_apis": 0,
+    "total_apis": 12,
+    "success_rate": 0.0
+  },
+  "detailed_results": {
+    "BTC/USDT:USDT": {
+      "全域帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    },
+    "ETH/USDT:USDT": {
+      "全域帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    },
+    "BNB/USDT:USDT": {
+      "全域帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    },
+    "ADA/USDT:USDT": {
+      "全域帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者帳戶多空比": {
+        "status": "❌ 無資料"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    }
+  }
+}

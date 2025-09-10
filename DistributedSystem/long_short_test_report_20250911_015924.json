@@ -1,0 +1,80 @@
+{
+  "test_timestamp": "2025-09-11T01:59:24.050042",
+  "summary": {
+    "successful_symbols": 4,
+    "total_symbols": 4,
+    "working_apis": 8,
+    "total_apis": 12,
+    "success_rate": 66.66666666666666
+  },
+  "detailed_results": {
+    "BTC/USDT:USDT": {
+      "全域帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 1.1164,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 1.3041,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    },
+    "ETH/USDT:USDT": {
+      "全域帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 1.8977,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 2.1888,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    },
+    "BNB/USDT:USDT": {
+      "全域帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 1.3321,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 0.7918,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    },
+    "ADA/USDT:USDT": {
+      "全域帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 2.6049,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者帳戶多空比": {
+        "records_count": 5,
+        "latest_ratio": 3.158,
+        "latest_timestamp": "2025-09-11 01:55:00",
+        "status": "✅ 成功"
+      },
+      "頂級交易者倉位多空比": {
+        "status": "❌ 無資料"
+      }
+    }
+  }
+}

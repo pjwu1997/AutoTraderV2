@@ -1,0 +1,73 @@
+{
+  "test_timestamp": "2025-09-11T02:06:14.334781",
+  "test_type": "interest_and_open_interest",
+  "summary": {
+    "successful_symbols": 3,
+    "total_symbols": 3,
+    "working_apis": 9,
+    "total_apis": 9,
+    "success_rate": 100.0
+  },
+  "detailed_results": {
+    "BTC/USDT:USDT": {
+      "current_open_interest": {
+        "value": 94785.798,
+        "value_usd": 0.0,
+        "status": "✅ 成功"
+      },
+      "historical_open_interest": {
+        "records_count": 5,
+        "latest_value": 94856.762,
+        "latest_timestamp": "2025-09-11 02:00:00",
+        "status": "✅ 成功"
+      },
+      "oi_change_24h": {
+        "change_percentage": 2.832796474025072,
+        "trend": "increasing",
+        "current": 94785.798,
+        "previous": 92174.677,
+        "status": "✅ 成功"
+      }
+    },
+    "ETH/USDT:USDT": {
+      "current_open_interest": {
+        "value": 1962571.523,
+        "value_usd": 0.0,
+        "status": "✅ 成功"
+      },
+      "historical_open_interest": {
+        "records_count": 5,
+        "latest_value": 1962917.929,
+        "latest_timestamp": "2025-09-11 02:00:00",
+        "status": "✅ 成功"
+      },
+      "oi_change_24h": {
+        "change_percentage": -3.652598833450412,
+        "trend": "decreasing",
+        "current": 1962571.523,
+        "previous": 2036974.012,
+        "status": "✅ 成功"
+      }
+    },
+    "BNB/USDT:USDT": {
+      "current_open_interest": {
+        "value": 725747.74,
+        "value_usd": 0.0,
+        "status": "✅ 成功"
+      },
+      "historical_open_interest": {
+        "records_count": 5,
+        "latest_value": 725536.34,
+        "latest_timestamp": "2025-09-11 02:00:00",
+        "status": "✅ 成功"
+      },
+      "oi_change_24h": {
+        "change_percentage": 9.77449684326437,
+        "trend": "increasing",
+        "current": 725747.74,
+        "previous": 661126.0,
+        "status": "✅ 成功"
+      }
+    }
+  }
+}
