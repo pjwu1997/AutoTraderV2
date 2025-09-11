@@ -1,0 +1,123 @@
+{
+  "distribution_type": "FULL_COLLECTION",
+  "total_slaves": 3,
+  "total_symbols": 526,
+  "distribution_summary": {
+    "slave-1": {
+      "symbol_count": 176,
+      "avg_volume_24h": 434212746.1045652,
+      "sample_symbols": [
+        "ETHUSDT",
+        "BTCUSDT",
+        "SOLUSDT",
+        "ETHUSDC",
+        "BTCUSDC"
+      ]
+    },
+    "slave-2": {
+      "symbol_count": 175,
+      "avg_volume_24h": 10398412.033212839,
+      "sample_symbols": [
+        "MASKUSDT",
+        "USUALUSDT",
+        "SAHARAUSDT",
+        "SAGAUSDT",
+        "SUSHIUSDT"
+      ]
+    },
+    "slave-3": {
+      "symbol_count": 175,
+      "avg_volume_24h": 2859737.840084545,
+      "sample_symbols": [
+        "SOPHUSDT",
+        "ZEREBROUSDT",
+        "C98USDT",
+        "1000LUNCUSDT",
+        "SKATEUSDT"
+      ]
+    }
+  },
+  "top_symbols_by_volume": [
+    [
+      "ETHUSDT",
+      20366726689.16
+    ],
+    [
+      "BTCUSDT",
+      12825270666.63
+    ],
+    [
+      "SOLUSDT",
+      6163395368.7238
+    ],
+    [
+      "ETHUSDC",
+      3676821616.32
+    ],
+    [
+      "BTCUSDC",
+      3467281144.3
+    ],
+    [
+      "MYXUSDT",
+      2079827890.2402
+    ],
+    [
+      "DOGEUSDT",
+      1974691053.02626
+    ],
+    [
+      "XRPUSDT",
+      1369314883.2538
+    ],
+    [
+      "SOLUSDC",
+      1223456688.407
+    ],
+    [
+      "WLDUSDT",
+      1020660381.9799
+    ],
+    [
+      "PUMPUSDT",
+      975760874.637479
+    ],
+    [
+      "AVAXUSDT",
+      833549493.01
+    ],
+    [
+      "LINEAUSDT",
+      821250804.30524
+    ],
+    [
+      "ENAUSDT",
+      791536389.0007
+    ],
+    [
+      "BAKEUSDT",
+      717672628.8468
+    ],
+    [
+      "HOLOUSDT",
+      605391310.1198
+    ],
+    [
+      "NAORISUSDT",
+      604520793.51917
+    ],
+    [
+      "SUIUSDT",
+      544555828.09599
+    ],
+    [
+      "HYPEUSDT",
+      544228349.89623
+    ],
+    [
+      "BNBUSDT",
+      533045693.208
+    ]
+  ],
+  "generated_at": "2024-01-01T00:00:00Z"
+}
