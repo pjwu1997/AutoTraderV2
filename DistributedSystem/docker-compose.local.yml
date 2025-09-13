@@ -1,0 +1,127 @@
+# 本地測試 Docker Compose 配置
+version: '3.8'
+
+services:
+  # MongoDB - 資料庫
+  mongodb:
+    image: mongo:7.0
+    container_name: autotrader-mongo-local
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=test123456
+      - MONGO_INITDB_DATABASE=trading_data_test
+    volumes:
+      - mongodb_local_data:/data/db
+      - ./Scripts/deployment/mongodb.conf:/etc/mongod.conf:ro
+    networks:
+      - autotrader-local
+    restart: unless-stopped
+
+  # Master 協調器
+  master:
+    build:
+      context: ./MasterVM
+      dockerfile: Dockerfile
+    container_name: autotrader-master-local
+    ports:
+      - "8080:8080"
+    environment:
+      - MASTER_PORT=8080
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB_NAME=trading_data_test
+      - MONGO_ROOT_USER=admin
+      - MONGO_ROOT_PASSWORD=test123456
+      - NUM_SLAVES=3
+      - TEST_MODE=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./Config/local:/app/config:ro
+      - ./MasterVM/templates:/app/templates:ro
+    networks:
+      - autotrader-local
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  # Slave-1 資料收集器
+  slave-1:
+    build:
+      context: ./SlaveVM/data_fetcher
+      dockerfile: Dockerfile
+    container_name: autotrader-slave-1-local
+    ports:
+      - "8081:8081"
+    environment:
+      - SLAVE_ID=slave-1
+      - MASTER_URL=http://master:8080
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB_NAME=trading_data_test
+      - HEALTH_PORT=8081
+      - TEST_MODE=true
+      - LOG_LEVEL=DEBUG
+      # 測試用少量 symbols
+      - SYMBOLS=BTCUSDT,ETHUSDT,SOLUSDT,ADAUSDT,XRPUSDT,DOTUSDT,LINKUSDT,UNIUSDT,LTCUSDT,BCHUSDT,AVAXUSDT,ATOMUSDT,ALGOUSDT,VETUSDT,MATICUSDT,FILUSDT,AAVEUSDT
+    networks:
+      - autotrader-local
+    depends_on:
+      - master
+    restart: unless-stopped
+
+  # Slave-2 資料收集器
+  slave-2:
+    build:
+      context: ./SlaveVM/data_fetcher
+      dockerfile: Dockerfile
+    container_name: autotrader-slave-2-local
+    ports:
+      - "8082:8081"  # 映射到不同端口避免衝突
+    environment:
+      - SLAVE_ID=slave-2
+      - MASTER_URL=http://master:8080
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB_NAME=trading_data_test
+      - HEALTH_PORT=8081
+      - TEST_MODE=true
+      - LOG_LEVEL=DEBUG
+      # 測試用少量 symbols
+      - SYMBOLS=BNBUSDT,TRXUSDT,EOSUSDT,XLMUSDT,XMRUSDT,DASHUSDT,ETCUSDT,IOTAUSDT,NEOUSDT,ONTUSDT,QTUMUSDT,ICXUSDT,LSKUSDT,NANOUSDT,ZILUSDT,BATUSDT,ENJUSDT
+    networks:
+      - autotrader-local
+    depends_on:
+      - master
+    restart: unless-stopped
+
+  # Slave-3 資料收集器
+  slave-3:
+    build:
+      context: ./SlaveVM/data_fetcher
+      dockerfile: Dockerfile
+    container_name: autotrader-slave-3-local
+    ports:
+      - "8083:8081"  # 映射到不同端口避免衝突
+    environment:
+      - SLAVE_ID=slave-3
+      - MASTER_URL=http://master:8080
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB_NAME=trading_data_test
+      - HEALTH_PORT=8081
+      - TEST_MODE=true
+      - LOG_LEVEL=DEBUG
+      # 測試用少量 symbols
+      - SYMBOLS=CHZUSDT,HBARUSDT,STXUSDT,CRVUSDT,COMPUSDT,YFIUSDT,SNXUSDT,UMAUSDT,BALUSDT,CVCUSDT,STORJUSDT,KNCUSDT,LRCUSDT,BANDUSDT,RLCUSDT,NMRUSDT
+    networks:
+      - autotrader-local
+    depends_on:
+      - master
+    restart: unless-stopped
+
+# 網路配置
+networks:
+  autotrader-local:
+    driver: bridge
+
+# 資料卷配置
+volumes:
+  mongodb_local_data:
