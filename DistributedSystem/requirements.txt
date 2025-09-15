@@ -1,0 +1,47 @@
+# AutoTrader DistributedSystem - Unified Dependencies
+# This file contains all dependencies needed for Master, Slave, and Common modules
+
+# Web frameworks and HTTP clients
+aiohttp==3.9.1
+aiohttp-cors==0.7.0
+requests==2.31.0
+websockets==12.0
+
+# Database clients
+pymongo==4.6.0
+motor==3.3.2
+
+# Redis client
+aioredis==2.0.1
+
+# Data processing
+pandas==2.1.4
+numpy==1.25.2
+
+# Exchange API
+ccxt==4.1.64
+
+# System monitoring
+psutil==5.9.6
+
+# Time handling
+pytz==2023.3
+python-dateutil==2.8.2
+
+# Configuration management
+python-dotenv==1.0.0
+
+# JSON processing
+orjson==3.9.10
+
+# Logging
+structlog==23.2.0
+
+# Task scheduling
+schedule==1.2.0
+
+# Error handling and retry logic
+tenacity==8.2.3
+
+# Data visualization (for debugging/monitoring)
+matplotlib==3.8.2
