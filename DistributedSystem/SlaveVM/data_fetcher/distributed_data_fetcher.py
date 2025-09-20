@@ -18,7 +18,7 @@ from pymongo import MongoClient
 # 引入原本的 DataFetcher
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from DataFetcher.data_fetcher import DataFetcher
-from enhanced_data_fetcher import EnhancedDataFetcher
+from schema_compatible_collector import SchemaCompatibleCollector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class DistributedDataFetcher:
         self.start_time = datetime.utcnow()
         
         # 初始化增強版資料收集器 (基於原本 DataFetcher)
-        self.data_fetcher = EnhancedDataFetcher(slave_id=slave_id, **kwargs)
+        self.data_fetcher = SchemaCompatibleCollector(slave_id=slave_id, **kwargs)
         
         logger.info(f"Initialized {slave_id} with {len(symbols)} symbols")
         logger.info(f"Sample symbols: {symbols[:5]}...")
@@ -188,7 +188,7 @@ def load_config_from_env() -> Dict:
         "exchange_name": os.getenv("EXCHANGE_NAME", "binance"),
         "db_uri": os.getenv("MONGO_URI", "mongodb://shared-mongo:27017/"),
         "db_name": os.getenv("MONGO_DB_NAME", "trading_data"),
-        "timeframe": os.getenv("TIMEFRAME", "5m")
+        "timeframe": os.getenv("TIMEFRAME", "1m")  # Changed to 1m for precision matching WebSocket data
     }
 
 def main():

@@ -7,8 +7,8 @@ services:
   # Master 協調器
   master-coordinator:
     build:
-      context: ../../MasterVM
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: MasterVM/Dockerfile
     container_name: master-coordinator
     ports:
       - "8080:8080"  # Master API 端口
@@ -47,7 +47,6 @@ services:
       - MONGO_INITDB_DATABASE=${MONGO_DB_NAME:-trading_data}
     volumes:
       - mongodb_data:/data/db
-      - ./mongodb.conf:/etc/mongod.conf:ro
     networks:
       - distributed-net
     restart: unless-stopped
@@ -59,7 +58,7 @@ services:
         reservations:
           memory: 1G
           cpus: '0.5'
-    command: mongod --config /etc/mongod.conf
+    command: mongod --bind_ip_all
 
   # Redis (用於任務佇列和快取)
   redis:
@@ -82,8 +81,8 @@ services:
   # 全量 Symbol 分配器 (一次性執行)
   full-symbol-distributor:
     build:
-      context: ../../Common
-      dockerfile: Dockerfile.distributor
+      context: ../..
+      dockerfile: Common/Dockerfile.distributor
     container_name: full-symbol-distributor
     environment:
       - NUM_SLAVES=${NUM_SLAVES:-5}

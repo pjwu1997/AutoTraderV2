@@ -128,9 +128,10 @@ class EnhancedDataFetcher(DataFetcher):
             "collector_id": self.slave_id
         }
 
-        # Store data in MongoDB - 使用原本的方法
-        print(f"Storing enhanced data for {symbol}...")
-        self.store_data("market_data", symbol, data)
+        # Store data in MongoDB - 使用每個符號的專屬集合
+        collection_name = f"{symbol}_{self.timeframe}"
+        print(f"💾 FIXED: Storing enhanced data for {symbol} in collection {collection_name}...")
+        self.store_data(collection_name, symbol, data)
     
     def _format_enhanced_long_short(self, enhanced_data):
         """格式化增強版多空比資料"""

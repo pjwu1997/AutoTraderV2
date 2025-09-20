@@ -35,10 +35,17 @@ DistributedSystem/
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── SlaveVM/                     # Slave VM 程式碼
-│   ├── data_fetcher/
+│   ├── data_fetcher/            # REST API 資料收集
 │   │   ├── distributed_data_fetcher.py
+│   │   ├── enhanced_funding_collector.py
+│   │   ├── schema_compatible_collector.py
 │   │   ├── Dockerfile
 │   │   └── requirements.txt
+│   ├── websockets/              # WebSocket 即時資料
+│   │   ├── websocket_controller.py
+│   │   ├── kline_websocket.py
+│   │   ├── liquidation_websocket.py
+│   │   └── Dockerfile
 │   └── health_checker/
 │       ├── slave_health.py
 │       └── Dockerfile
@@ -113,14 +120,14 @@ scp master-vm:~/DistributedSystem/Config/slaves/slave-1.env ../../Config/slaves/
 
 ## 📊 功能特色
 
-### 完整資料收集
+### 完整資料收集 (1分鐘精度)
 每台 Slave VM 會收集分配 symbols 的所有資料：
-- **OHLCV**: 5分鐘K線資料
-- **CVD**: 累積成交量差異
-- **Spot CVD**: 現貨市場CVD  
-- **Long-Short Ratio**: 多空比例
-- **Funding Rate**: 資金費率
-- **WebSocket**: K線和清算即時資料
+- **OHLCV**: 1分鐘K線資料 (WebSocket即時 + REST API備份)
+- **CVD**: Spot + Futures CVD (1分鐘精度)
+- **Funding Rate**: 當前費率 + 下一期費率 + Mark Price + Index Price
+- **Long/Short Ratios**: 4種不同類型的多空比 (全域、頂級交易者等)
+- **Liquidations**: 即時清算事件 (WebSocket 1分鐘聚合)
+- **Open Interest**: 當前 + 變化 + 趨勢分析
 
 ### 監控和健康檢查
 - **Master Dashboard**: 即時監控所有 Slave 狀態
@@ -154,8 +161,12 @@ docker-compose -f docker-compose.master.yml logs
 docker-compose -f docker-compose.master.yml restart
 docker-compose -f docker-compose.master.yml down
 
-# Slave VM
+# Slave VM (4個服務容器)
 docker-compose -f docker-compose.slave.yml logs
+docker-compose -f docker-compose.slave.yml logs data-fetcher
+docker-compose -f docker-compose.slave.yml logs kline-websocket
+docker-compose -f docker-compose.slave.yml logs liquidation-websocket
+docker-compose -f docker-compose.slave.yml logs health-checker
 docker-compose -f docker-compose.slave.yml restart data-fetcher
 docker-compose -f docker-compose.slave.yml down
 ```
@@ -214,8 +225,17 @@ sudo ufw status
 
 ### 資料收集停止
 ```bash
-# 檢查 Slave 日誌
+# 檢查所有服務狀態
+docker-compose -f docker-compose.slave.yml ps
+
+# 檢查各服務日誌
 docker-compose -f docker-compose.slave.yml logs data-fetcher
+docker-compose -f docker-compose.slave.yml logs kline-websocket  
+docker-compose -f docker-compose.slave.yml logs liquidation-websocket
+
+# 檢查 WebSocket 連接
+curl http://slave-ip:8081/health  # 健康檢查
+tail -f logs/kline_websocket.log  # WebSocket 日誌
 
 # 檢查 API 配額
 # Binance API 每分鐘限制 1200 請求/IP

@@ -4,12 +4,12 @@
 version: '3.8'
 
 services:
-  # 分散式資料收集器 (REST API) - 連接到 Master MongoDB
-  data-fetcher:
+  # 統一資料收集器 (REST API + WebSocket) - 連接到 Master MongoDB
+  unified-collector:
     build:
-      context: ../../SlaveVM/data_fetcher
-      dockerfile: Dockerfile
-    container_name: ${SLAVE_ID}-data-fetcher
+      context: ../../..
+      dockerfile: DistributedSystem/SlaveVM/data_fetcher/Dockerfile.unified
+    container_name: ${SLAVE_ID}-unified-collector
     environment:
       - SLAVE_ID=${SLAVE_ID}
       - SYMBOLS=${SYMBOLS}
@@ -20,7 +20,7 @@ services:
       - MONGO_USERNAME=${MONGO_USERNAME}
       - MONGO_PASSWORD=${MONGO_PASSWORD}
       - MONGO_AUTH_SOURCE=${MONGO_AUTH_SOURCE}
-      - TIMEFRAME=5m
+      - TIMEFRAME=1m  # Changed to 1m for precision matching WebSocket data
       - FETCH_INTERVAL=${FETCH_INTERVAL:-60}
       - BATCH_SIZE=${BATCH_SIZE:-15}
       - RATE_LIMIT_DELAY=${RATE_LIMIT_DELAY:-0.1}
@@ -33,75 +33,90 @@ services:
     networks:
       - slave-net
     restart: unless-stopped
-    depends_on:
-      - health-checker
+    # depends_on:
+    #   - health-checker
     deploy:
       resources:
         limits:
-          memory: 1G  # 增加記憶體限制 (處理更多 symbols)
-          cpus: '0.75'
+          memory: 1.5G  # 增加記憶體限制 (統一收集器需要更多資源)
+          cpus: '1.0'
         reservations:
-          memory: 512M
-          cpus: '0.5'
+          memory: 768M
+          cpus: '0.75'
 
-  # K線 WebSocket 收集器 (即時資料) - 連接到 Master MongoDB
+  # K線 WebSocket 收集器 (1分鐘即時資料) - 已實現
   kline-websocket:
     build:
-      context: ../../SlaveVM/websockets
-      dockerfile: Dockerfile.kline
+      context: ../../..
+      dockerfile: DistributedSystem/SlaveVM/websockets/Dockerfile.kline
     container_name: ${SLAVE_ID}-kline-ws
     environment:
       - SLAVE_ID=${SLAVE_ID}
       - SYMBOLS=${SYMBOLS}
-      - MONGO_URI=${MONGO_URI}  # 指向 Master VM MongoDB
+      - MASTER_URL=${MASTER_URL}
+      - MONGO_URI=${MONGO_URI}
       - MONGO_DB_NAME=${MONGO_DB_NAME}
       - MONGO_USERNAME=${MONGO_USERNAME}
       - MONGO_PASSWORD=${MONGO_PASSWORD}
       - MONGO_AUTH_SOURCE=${MONGO_AUTH_SOURCE}
-      - KLINE_INTERVAL=5m
-      - WS_URL=wss://fstream.binance.com/ws/
+      - KLINE_INTERVAL=1m
+      - KLINE_SPOT_WS_URL=wss://stream.binance.com:9443/ws/{streams}
+      - KLINE_FUTURES_WS_URL=wss://fstream.binance.com/ws/{streams}
     volumes:
       - ./logs:/app/logs
     networks:
       - slave-net
     restart: unless-stopped
+    depends_on:
+      - unified-collector
     deploy:
       resources:
         limits:
-          memory: 512M  # 增加記憶體限制 (處理更多 symbols)
+          memory: 512M
           cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
 
-  # 清算 WebSocket 收集器 - 連接到 Master MongoDB
+  # 清算 WebSocket 收集器 (1分鐘即時資料) - 已實現
   liquidation-websocket:
     build:
-      context: ../../SlaveVM/websockets  
-      dockerfile: Dockerfile.liquidation
+      context: ../../..
+      dockerfile: DistributedSystem/SlaveVM/websockets/Dockerfile.liquidation
     container_name: ${SLAVE_ID}-liquidation-ws
     environment:
       - SLAVE_ID=${SLAVE_ID}
       - SYMBOLS=${SYMBOLS}
-      - MONGO_URI=${MONGO_URI}  # 指向 Master VM MongoDB
+      - MASTER_URL=${MASTER_URL}
+      - MONGO_URI=${MONGO_URI}
       - MONGO_DB_NAME=${MONGO_DB_NAME}
       - MONGO_USERNAME=${MONGO_USERNAME}
       - MONGO_PASSWORD=${MONGO_PASSWORD}
       - MONGO_AUTH_SOURCE=${MONGO_AUTH_SOURCE}
-      - WS_URL=wss://fstream.binance.com/ws/
+      - LIQUIDATION_WS_URL=wss://fstream.binance.com/ws/!forceOrder@arr
+      - LIQUIDATION_CLEANUP_MINUTES=5
+      - LIQUIDATION_RECONNECT_INTERVAL=86100
     volumes:
       - ./logs:/app/logs
     networks:
       - slave-net
     restart: unless-stopped
+    depends_on:
+      - unified-collector
     deploy:
       resources:
         limits:
-          memory: 512M  # 增加記憶體限制 (處理更多 symbols)
-          cpus: '0.5'
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
 
   # 健康檢查器
   health-checker:
     build:
-      context: ../../SlaveVM/health_checker
-      dockerfile: Dockerfile
+      context: ../../..
+      dockerfile: DistributedSystem/SlaveVM/health_checker/Dockerfile
     container_name: ${SLAVE_ID}-health
     ports:
       - "${HEALTH_PORT:-8081}:8081"

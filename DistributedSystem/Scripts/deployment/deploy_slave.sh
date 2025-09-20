@@ -101,7 +101,7 @@ fi
 echo ""
 echo "🔍 檢查各服務狀態..."
 
-SERVICES=("data-fetcher" "kline-websocket" "liquidation-websocket" "health-checker")
+SERVICES=("unified-collector" "kline-websocket" "liquidation-websocket" "health-checker")
 for service in "${SERVICES[@]}"; do
     container_name="${SLAVE_ID}-${service}"
     if docker ps --format "table {{.Names}}" | grep -q "$container_name"; then
@@ -123,7 +123,7 @@ echo "- Master URL: $MASTER_URL"
 echo ""
 echo "📊 監控指令:"
 echo "- 查看所有日誌: docker-compose -f docker-compose.slave.yml logs"
-echo "- 查看特定服務: docker-compose -f docker-compose.slave.yml logs data-fetcher"
+echo "- 查看統一收集器: docker-compose -f docker-compose.slave.yml logs unified-collector"
 echo "- 重啟服務: docker-compose -f docker-compose.slave.yml restart"
 echo "- 停止服務: docker-compose -f docker-compose.slave.yml down"
 echo ""

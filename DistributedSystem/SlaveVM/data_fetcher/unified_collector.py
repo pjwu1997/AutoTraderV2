@@ -65,19 +65,31 @@ class UnifiedCollector:
         })
         
         # Initialize MongoDB connection
-        self.mongo_client = MongoClient(config.mongo_uri)
+        self.mongo_client = MongoClient(config.mongo_uri, serverSelectionTimeoutMS=5000)
         self.db = self.mongo_client[config.mongo_db_name]
+        self.mongo_available = False
         
-        # Initialize collections
-        self.init_collections()
+        # Test MongoDB connection and initialize collections
+        try:
+            self.mongo_client.admin.command('ping')
+            self.mongo_available = True
+            self.init_collections()
+            logger.info("MongoDB connection established and collections initialized")
+        except Exception as e:
+            logger.warning(f"MongoDB not available: {e}")
+            logger.info("Collector will continue without MongoDB storage")
         
         # Initialize base data fetcher for compatibility
-        self.base_fetcher = DataFetcher(
-            mongo_uri=config.mongo_uri,
-            db_name=config.mongo_db_name,
-            symbols=config.symbols,
-            timeframe=config.timeframe
-        )
+        try:
+            self.base_fetcher = DataFetcher(
+                exchange_name="binance",
+                db_uri=config.mongo_uri,
+                db_name=config.mongo_db_name,
+                timeframe=config.timeframe
+            )
+        except Exception as e:
+            logger.warning(f"Could not initialize base DataFetcher: {e}")
+            self.base_fetcher = None
         
         # WebSocket connection states
         self.ws_connections = {}
@@ -127,6 +139,9 @@ class UnifiedCollector:
             # Get 24hr ticker
             ticker = await self._fetch_ticker(symbol)
             
+            # Get open interest
+            open_interest = await self._fetch_open_interest(symbol)
+            
             # Calculate additional metrics
             metrics = self._calculate_enhanced_metrics(ohlcv, orderbook, trades)
             
@@ -140,6 +155,7 @@ class UnifiedCollector:
                 "funding_rate": funding_rate,
                 "long_short_ratios": long_short_data,
                 "ticker_24h": ticker,
+                "open_interest": open_interest,
                 "enhanced_metrics": metrics,
                 "collection_type": "unified_market_data"
             }
@@ -314,6 +330,30 @@ class UnifiedCollector:
             logger.warning(f"Failed to fetch ticker for {symbol}: {e}")
             return {}
 
+    async def _fetch_open_interest(self, symbol: str) -> Dict:
+        """Fetch current open interest data"""
+        try:
+            # Convert symbol format: BTC/USDT:USDT -> BTCUSDT
+            symbol_clean = symbol.replace('/', '').replace(':USDT', '')
+            
+            # Current open interest
+            url = "https://fapi.binance.com/fapi/v1/openInterest"
+            response = requests.get(url, params={"symbol": symbol_clean}, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "open_interest": float(data.get('openInterest', 0)),
+                    "timestamp": int(data.get('time', int(time.time() * 1000)))
+                }
+            else:
+                logger.warning(f"Open interest API returned status {response.status_code} for symbol {symbol_clean}")
+                return {}
+                
+        except Exception as e:
+            logger.warning(f"Failed to fetch open interest for {symbol}: {e}")
+            return {}
+
     def _calculate_enhanced_metrics(self, ohlcv: List, orderbook: Dict, trades: List) -> Dict:
         """Calculate additional market metrics"""
         try:
@@ -440,8 +480,11 @@ class UnifiedCollector:
                 }
                 
                 # Store in MongoDB
-                self.db.kline_data.insert_one(kline_data)
-                logger.debug(f"Stored kline data for {symbol_formatted}")
+                if self.mongo_available:
+                    self.db.kline_data.insert_one(kline_data)
+                    logger.debug(f"Stored kline data for {symbol_formatted}")
+                else:
+                    logger.debug(f"Would store kline data for {symbol_formatted}")
                 
         except Exception as e:
             logger.error(f"Error processing kline message: {e}")
@@ -474,8 +517,11 @@ class UnifiedCollector:
                 }
                 
                 # Store in MongoDB
-                self.db.liquidations.insert_one(liquidation_data)
-                logger.debug(f"Stored liquidation data for {symbol_formatted}")
+                if self.mongo_available:
+                    self.db.liquidations.insert_one(liquidation_data)
+                    logger.debug(f"Stored liquidation data for {symbol_formatted}")
+                else:
+                    logger.debug(f"Would store liquidation data for {symbol_formatted}")
                 
         except Exception as e:
             logger.error(f"Error processing liquidation message: {e}")
@@ -485,10 +531,12 @@ class UnifiedCollector:
     async def store_market_data(self, data: Dict):
         """Store market data to MongoDB"""
         try:
-            if data:
+            if data and self.mongo_available:
                 collection_name = f"{data['symbol'].replace(':', '_').lower()}_market_data"
                 self.db[collection_name].insert_one(data)
                 logger.debug(f"Stored market data for {data['symbol']}")
+            elif data and not self.mongo_available:
+                logger.debug(f"MongoDB not available - would store data for {data['symbol']}")
         except Exception as e:
             logger.error(f"Error storing market data: {e}")
 

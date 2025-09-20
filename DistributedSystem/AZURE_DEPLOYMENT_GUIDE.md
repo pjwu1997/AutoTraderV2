@@ -75,6 +75,82 @@ echo "NUM_SLAVES=$NUM_SLAVES 的月費: $TOTAL_COST TWD"
 
 ---
 
+## 🔧 **前置需求**
+
+### **本地工具安裝**
+
+#### **必要工具**
+```bash
+# 檢查 Azure CLI
+az --version
+
+# 檢查 Git
+git --version
+
+# 檢查 SSH
+ssh -V
+```
+
+#### **安裝 sshpass (推薦)**
+```bash
+# Ubuntu/Debian
+sudo apt install sshpass
+
+# CentOS/RHEL
+sudo yum install sshpass
+
+# macOS (需要 Homebrew)
+brew install hudochenkov/sshpass/sshpass
+
+# 檢查安裝
+sshpass -V
+```
+
+### **認證方式設定**
+
+#### **方式 1: sshpass 密碼認證 (推薦)**
+```bash
+# 設定 VM 密碼
+export SSH_PASSWORD="your_secure_password"
+
+# 在部署過程中將會使用:
+# sshpass -p "$SSH_PASSWORD" ssh azureuser@VM_IP
+```
+
+#### **方式 2: SSH 金鑰認證**
+```bash
+# 生成 SSH 金鑰 (如果沒有)
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+
+# Azure CLI 會自動使用 ~/.ssh/id_rsa.pub
+```
+
+### **環境變數設定**
+```bash
+# 必要配置
+export NUM_SLAVES=3                    # Slave VM 數量
+export SSH_PASSWORD="your_password"    # VM 密碼 (使用 sshpass)
+export RESOURCE_GROUP="AutoTrader-RG"  # 資源群組名稱
+export AZURE_REGION="East Asia"        # Azure 區域
+
+# 可選配置
+export MASTER_VM_SIZE="Standard_B2s"   # Master VM 規格
+export SLAVE_VM_SIZE="Standard_B1s"    # Slave VM 規格
+export GIT_REPO_URL="https://github.com/pjwu1997/AutoTraderV2.git"
+export GIT_BRANCH="main"               # Git 分支
+
+# === 1分鐘精度 + WebSocket 配置 ===
+export TIMEFRAME="1m"                  # 資料精度 (1分鐘)
+export KLINE_INTERVAL="1m"             # WebSocket K線間隔
+export KLINE_SPOT_WS_URL="wss://stream.binance.com:9443/ws/{streams}"
+export KLINE_FUTURES_WS_URL="wss://fstream.binance.com/ws/{streams}"
+export LIQUIDATION_WS_URL="wss://fstream.binance.com/ws/!forceOrder@arr"
+export LIQUIDATION_CLEANUP_MINUTES=5
+export LIQUIDATION_RECONNECT_INTERVAL=86100
+```
+
+---
+
 ## 📝 部署步驟詳解
 
 ### **1. 創建 Azure 資源**
@@ -185,17 +261,41 @@ az network nsg rule create \
   --source-address-prefix 10.0.0.0/16
 ```
 
+#### 允許 WebSocket 服務內網存取
+```bash
+# 允許 Kline WebSocket (8082) - 只給內網
+az network nsg rule create \
+  --resource-group AutoTrader-RG \
+  --nsg-name AutoTrader-NSG \
+  --name KlineWebSocket \
+  --protocol tcp \
+  --priority 1005 \
+  --destination-port-range 8082 \
+  --source-address-prefix 10.0.0.0/16
+
+# 允許 Liquidation WebSocket (8083) - 只給內網  
+az network nsg rule create \
+  --resource-group AutoTrader-RG \
+  --nsg-name AutoTrader-NSG \
+  --name LiquidationWebSocket \
+  --protocol tcp \
+  --priority 1006 \
+  --destination-port-range 8083 \
+  --source-address-prefix 10.0.0.0/16
+```
+
 ---
 
 ### **3. 創建 Master VM**
 
+**使用 SSH 金鑰認證** (預設):
 ```bash
-# 創建 Master VM
+# 創建 Master VM (使用 SSH 金鑰)
 az vm create \
-  --resource-group AutoTrader-RG \
+  --resource-group $RESOURCE_GROUP \
   --name AutoTrader-Master \
   --image Ubuntu2204 \
-  --size Standard_B2s \
+  --size $MASTER_VM_SIZE \
   --vnet-name AutoTrader-VNet \
   --subnet default \
   --nsg AutoTrader-NSG \
@@ -205,7 +305,29 @@ az vm create \
   --generate-ssh-keys
 
 # 獲取 Master 公用 IP
-MASTER_PUBLIC_IP=$(az vm show -d -g AutoTrader-RG -n AutoTrader-Master --query publicIps -o tsv)
+MASTER_PUBLIC_IP=$(az vm show -d -g $RESOURCE_GROUP -n AutoTrader-Master --query publicIps -o tsv)
+echo "Master Public IP: $MASTER_PUBLIC_IP"
+```
+
+**或使用密碼認證** (搭配 sshpass):
+```bash
+# 創建 Master VM (使用密碼認證)
+az vm create \
+  --resource-group $RESOURCE_GROUP \
+  --name AutoTrader-Master \
+  --image Ubuntu2204 \
+  --size $MASTER_VM_SIZE \
+  --vnet-name AutoTrader-VNet \
+  --subnet default \
+  --nsg AutoTrader-NSG \
+  --public-ip-address-allocation static \
+  --private-ip-address 10.0.1.100 \
+  --admin-username azureuser \
+  --admin-password "$SSH_PASSWORD" \
+  --authentication-type password
+
+# 獲取 Master 公用 IP
+MASTER_PUBLIC_IP=$(az vm show -d -g $RESOURCE_GROUP -n AutoTrader-Master --query publicIps -o tsv)
 echo "Master Public IP: $MASTER_PUBLIC_IP"
 ```
 
@@ -269,9 +391,23 @@ done
 ### **5. 安裝 Docker (在所有 VM 上)**
 
 #### Master VM 安裝 Docker
+
+**使用 sshpass 密碼認證**:
 ```bash
-# Master VM
-ssh azureuser@$MASTER_PUBLIC_IP << 'EOF'
+# Master VM (使用 sshpass)
+sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$MASTER_PUBLIC_IP << 'EOF'
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin git
+sudo usermod -aG docker $USER
+sudo systemctl enable docker
+sudo systemctl start docker
+EOF
+```
+
+**或使用 SSH 金鑰認證**:
+```bash
+# Master VM (使用 SSH 金鑰)
+ssh -o StrictHostKeyChecking=no azureuser@$MASTER_PUBLIC_IP << 'EOF'
 sudo apt update
 sudo apt install -y docker.io docker-compose-plugin git
 sudo usermod -aG docker $USER
@@ -281,11 +417,31 @@ EOF
 ```
 
 #### Slave VMs 並行安裝 Docker (動態數量)
+
+**使用 sshpass 密碼認證**:
 ```bash
-# Slave VMs (平行執行)
+# Slave VMs (平行執行，使用 sshpass)
 for i in $(seq 1 $NUM_SLAVES); do
   SLAVE_IP=$(az vm show -d -g $RESOURCE_GROUP -n AutoTrader-Slave-$i --query publicIps -o tsv)
-  ssh azureuser@$SLAVE_IP << 'EOF' &
+  sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$SLAVE_IP << 'EOF' &
+  sudo apt update
+  sudo apt install -y docker.io docker-compose-plugin git
+  sudo usermod -aG docker $USER
+  sudo systemctl enable docker
+  sudo systemctl start docker
+EOF
+done
+wait
+
+echo "Docker 安裝完成於 1 台 Master + $NUM_SLAVES 台 Slave VMs"
+```
+
+**或使用 SSH 金鑰認證**:
+```bash
+# Slave VMs (平行執行，使用 SSH 金鑰)
+for i in $(seq 1 $NUM_SLAVES); do
+  SLAVE_IP=$(az vm show -d -g $RESOURCE_GROUP -n AutoTrader-Slave-$i --query publicIps -o tsv)
+  ssh -o StrictHostKeyChecking=no azureuser@$SLAVE_IP << 'EOF' &
   sudo apt update
   sudo apt install -y docker.io docker-compose-plugin git
   sudo usermod -aG docker $USER
@@ -311,37 +467,102 @@ echo "Docker 安裝完成於 1 台 Master + $NUM_SLAVES 台 Slave VMs"
 
 ### **6. 部署程式碼到 Master**
 
-#### 上傳程式碼
+#### 克隆程式碼
+
+**使用 sshpass 密碼認證**:
 ```bash
-# 上傳到 Master VM
-scp -r ./AutoTraderV2 azureuser@$MASTER_PUBLIC_IP:~/
+# 在 Master VM 上克隆程式碼 (使用 sshpass)
+sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$MASTER_PUBLIC_IP << 'EOF'
+# 移除舊的程式碼 (如果存在)
+rm -rf ~/AutoTraderV2
+
+# 從 GitHub 克隆最新程式碼
+git clone https://github.com/pjwu1997/AutoTraderV2.git ~/AutoTraderV2
+
+echo "程式碼克隆完成"
+EOF
 ```
-**目的**: 把本機的程式碼複製到 Master VM  
-**實際作用**: 使用 SCP 安全複製整個專案資料夾
+
+**或使用 SSH 金鑰認證**:
+```bash
+# 在 Master VM 上克隆程式碼 (使用 SSH 金鑰)
+ssh -o StrictHostKeyChecking=no azureuser@$MASTER_PUBLIC_IP << 'EOF'
+# 移除舊的程式碼 (如果存在)
+rm -rf ~/AutoTraderV2
+
+# 從 GitHub 克隆最新程式碼
+git clone https://github.com/pjwu1997/AutoTraderV2.git ~/AutoTraderV2
+
+echo "程式碼克隆完成"
+EOF
+```
+**目的**: 直接從 GitHub 下載最新程式碼到 Master VM  
+**實際作用**: 
+- 確保使用最新版本程式碼
+- 避免本地上傳大量檔案
+- 支援版本控制和分支切換
 
 #### 設定和部署 Master 服務
+
+**使用 sshpass 密碼認證**:
 ```bash
-# SSH 到 Master 並設定
-ssh azureuser@$MASTER_PUBLIC_IP << 'EOF'
+# SSH 到 Master 並設定 (使用 sshpass)
+sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$MASTER_PUBLIC_IP << EOF
 cd ~/AutoTraderV2/DistributedSystem
+
+# 拉取最新代碼 (包含統一的 requirements.txt)
+git pull origin main
 
 # 更新 Master 配置
 sed -i "s/MASTER_VM_IP=.*/MASTER_VM_IP=10.0.1.100/" Config/master/master_full_collection.env
 
 # 生成 Slave 配置
 cd Common/utils
-MASTER_VM_IP=10.0.1.100 python3 full_symbol_distributor.py
+NUM_SLAVES=$NUM_SLAVES MASTER_VM_IP=10.0.1.100 python3 full_symbol_distributor.py
 
-# 部署 Master 服務
-cd ../../Scripts/deployment
-cp ../../Config/master/master_full_collection.env .env
-sudo docker compose -f docker-compose.master.yml up -d
+# 回到根目錄並部署 Master 服務
+cd ~/AutoTraderV2/DistributedSystem
+cp Config/master/master_full_collection.env Scripts/deployment/.env
+sudo docker compose -f Scripts/deployment/docker-compose.master.yml up -d --build
+EOF
+```
+
+**或使用 SSH 金鑰認證**:
+```bash
+# SSH 到 Master 並設定 (使用 SSH 金鑰)
+ssh -o StrictHostKeyChecking=no azureuser@$MASTER_PUBLIC_IP << EOF
+cd ~/AutoTraderV2/DistributedSystem
+
+# 拉取最新代碼 (包含統一的 requirements.txt)
+git pull origin main
+
+# 更新 Master 配置
+sed -i "s/MASTER_VM_IP=.*/MASTER_VM_IP=10.0.1.100/" Config/master/master_full_collection.env
+
+# 生成 Slave 配置
+cd Common/utils
+NUM_SLAVES=$NUM_SLAVES MASTER_VM_IP=10.0.1.100 python3 full_symbol_distributor.py
+
+# 回到根目錄並部署 Master 服務
+cd ~/AutoTraderV2/DistributedSystem
+cp Config/master/master_full_collection.env Scripts/deployment/.env
+sudo docker compose -f Scripts/deployment/docker-compose.master.yml up -d --build
 EOF
 ```
 
 **詳細解釋**:
 
-1. **更新配置**:
+1. **拉取最新代碼**:
+   ```bash
+   git pull origin main
+   ```
+   **目的**: 確保獲取包含統一 requirements.txt 的最新版本  
+   **實際作用**: 
+   - 下載統一的依賴管理系統
+   - 獲取修復的 Docker 配置檔案
+   - 確保所有服務使用相同版本的依賴
+
+2. **更新配置**:
    ```bash
    sed -i "s/MASTER_VM_IP=.*/MASTER_VM_IP=10.0.1.100/" Config/master/master_full_collection.env
    ```
@@ -360,30 +581,36 @@ EOF
 
 3. **啟動 Master 服務**:
    ```bash
-   sudo docker compose -f docker-compose.master.yml up -d
+   sudo docker compose -f docker-compose.master.yml up -d --build
    ```
    **目的**: 啟動 Master 服務容器  
    **實際作用**:
    - 啟動 MongoDB 容器 (資料庫)
    - 啟動 Master API 容器 (協調器)
+   - `--build`: 重新建構 Docker 映像 (包含最新代碼)
    - `-d`: 背景執行 (不會佔用終端)
 
 ---
 
 ### **7. 部署 Slave VMs (動態數量)**
 
+**使用 sshpass 密碼認證**:
 ```bash
-# 分發 Slave 配置並部署 (支援任意台數)
+# 分發 Slave 配置並部署 (支援任意台數，使用 sshpass)
 for i in $(seq 1 $NUM_SLAVES); do
   SLAVE_IP=$(az vm show -d -g $RESOURCE_GROUP -n AutoTrader-Slave-$i --query publicIps -o tsv)
   
   echo "正在部署 Slave-$i (IP: $SLAVE_IP)..."
   
-  # 上傳程式碼
-  scp -r ./AutoTraderV2 azureuser@$SLAVE_IP:~/
+  # 克隆程式碼並部署服務 (使用 sshpass)
+  sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no azureuser@$SLAVE_IP << EOF
+  # 移除舊的程式碼 (如果存在)
+  rm -rf ~/AutoTraderV2
   
-  # 部署 Slave 服務
-  ssh azureuser@$SLAVE_IP << EOF
+  # 從 GitHub 克隆最新程式碼 (包含統一 requirements.txt)
+  git clone https://github.com/pjwu1997/AutoTraderV2.git ~/AutoTraderV2
+  
+  # 切換到部署目錄
   cd ~/AutoTraderV2/DistributedSystem/Scripts/deployment
   
   # 設定環境變數
@@ -392,8 +619,45 @@ for i in $(seq 1 $NUM_SLAVES); do
   echo "MONGO_URI=mongodb://10.0.1.100:27017/" >> .env
   echo "NUM_SLAVES=$NUM_SLAVES" >> .env
   
-  # 啟動服務  
-  sudo docker compose -f docker-compose.slave.yml up -d
+  # 啟動服務 (重新建構以使用統一依賴)
+  sudo docker compose -f docker-compose.slave.yml up -d --build
+  
+  echo "Slave-$i 部署完成"
+EOF
+done
+
+echo "=== 部署完成 ==="
+echo "已部署 $NUM_SLAVES 台 Slave VMs"
+echo "Symbol 分配: 約 $((526 / NUM_SLAVES)) 個 symbols/台"
+```
+
+**或使用 SSH 金鑰認證**:
+```bash
+# 分發 Slave 配置並部署 (支援任意台數，使用 SSH 金鑰)
+for i in $(seq 1 $NUM_SLAVES); do
+  SLAVE_IP=$(az vm show -d -g $RESOURCE_GROUP -n AutoTrader-Slave-$i --query publicIps -o tsv)
+  
+  echo "正在部署 Slave-$i (IP: $SLAVE_IP)..."
+  
+  # 克隆程式碼並部署服務 (使用 SSH 金鑰)
+  ssh -o StrictHostKeyChecking=no azureuser@$SLAVE_IP << EOF
+  # 移除舊的程式碼 (如果存在)
+  rm -rf ~/AutoTraderV2
+  
+  # 從 GitHub 克隆最新程式碼 (包含統一 requirements.txt)
+  git clone https://github.com/pjwu1997/AutoTraderV2.git ~/AutoTraderV2
+  
+  # 切換到部署目錄
+  cd ~/AutoTraderV2/DistributedSystem/Scripts/deployment
+  
+  # 設定環境變數
+  echo "SLAVE_ID=slave-$i" > .env
+  echo "MASTER_URL=http://10.0.1.100:8080" >> .env
+  echo "MONGO_URI=mongodb://10.0.1.100:27017/" >> .env
+  echo "NUM_SLAVES=$NUM_SLAVES" >> .env
+  
+  # 啟動服務 (重新建構以使用統一依賴)
+  sudo docker compose -f docker-compose.slave.yml up -d --build
   
   echo "Slave-$i 部署完成"
 EOF
@@ -406,12 +670,15 @@ echo "Symbol 分配: 約 $((526 / NUM_SLAVES)) 個 symbols/台"
 
 **詳細解釋**:
 
-1. **上傳程式碼**:
+1. **克隆程式碼**:
    ```bash
-   scp -r ./AutoTraderV2 azureuser@$SLAVE_IP:~/
+   git clone https://github.com/pjwu1997/AutoTraderV2.git ~/AutoTraderV2
    ```
-   **目的**: 把程式碼複製到每台 Slave VM  
-   **實際作用**: $NUM_SLAVES 台 VM 都有完整的程式碼
+   **目的**: 從 GitHub 下載最新程式碼到每台 Slave VM  
+   **實際作用**: 
+   - $NUM_SLAVES 台 VM 都有完整且最新的程式碼
+   - 避免本地網路上傳，直接從 GitHub 下載更快
+   - 支援版本控制，確保代碼一致性
 
 2. **設定環境變數**:
    ```bash
@@ -605,9 +872,12 @@ db.market_data.aggregate([
 ## 🚀 **快速開始 - 不同規模部署**
 
 ### **3台 VM 配置 (小規模測試)**
+
+**使用 sshpass 密碼認證**:
 ```bash
 # 設定配置
 export NUM_SLAVES=3
+export SSH_PASSWORD="your_secure_password"  # ← 設定 VM 密碼
 export MASTER_VM_SIZE="Standard_B2s"
 export SLAVE_VM_SIZE="Standard_B1s"
 export AZURE_REGION="East Asia"
@@ -616,36 +886,50 @@ export RESOURCE_GROUP="AutoTrader-RG"
 # 預估成本: ~4,020 TWD/月
 # 每台 Slave 處理: ~175 個 symbols
 
-# 部署
-./deploy_autotrader.sh  # 使用上述所有步驟
+# 依照指南步驟執行部署
+```
+
+**或使用 SSH 金鑰認證**:
+```bash
+# 設定配置 (不需要密碼)
+export NUM_SLAVES=3
+export MASTER_VM_SIZE="Standard_B2s"
+export SLAVE_VM_SIZE="Standard_B1s"
+export AZURE_REGION="East Asia"
+export RESOURCE_GROUP="AutoTrader-RG"
+
+# 確保有 SSH 金鑰
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"  # 如果沒有的話
+
+# 依照指南步驟執行部署
 ```
 
 ### **5台 VM 配置 (中等規模)**
 ```bash
-# 設定配置  
+# 設定配置 (使用 sshpass 或 SSH 金鑰)
 export NUM_SLAVES=5
+export SSH_PASSWORD="your_secure_password"  # sshpass 使用 (可選)
 export MASTER_VM_SIZE="Standard_B2s"
 export SLAVE_VM_SIZE="Standard_B1s"
 
 # 預估成本: ~5,080 TWD/月
 # 每台 Slave 處理: ~105 個 symbols
 
-# 部署
-./deploy_autotrader.sh
+# 依照指南步驟執行部署
 ```
 
 ### **10台 VM 配置 (大規模生產)**
 ```bash
-# 設定配置
+# 設定配置 (使用 sshpass 或 SSH 金鑰)
 export NUM_SLAVES=10
+export SSH_PASSWORD="your_secure_password"  # sshpass 使用 (可選)
 export MASTER_VM_SIZE="Standard_B4ms"    # 升級 Master
 export SLAVE_VM_SIZE="Standard_B2s"      # 升級 Slave
 
 # 預估成本: ~12,000 TWD/月
 # 每台 Slave 處理: ~53 個 symbols
 
-# 部署
-./deploy_autotrader.sh
+# 依照指南步驟執行部署
 ```
 
 ### **一鍵部署腳本範例**
@@ -691,6 +975,16 @@ fi
 - 💰 **動態成本計算**: 自動計算不同規模的月費
 - 📊 **彈性架構**: 根據需求選擇最適合的配置
 - 🚀 **一鍵部署**: 支援腳本化自動部署
+- 🔗 **Git 部署**: 使用 Git clone 取代 scp，更快更可靠
+- 🔐 **多重認證**: 支援 sshpass 密碼認證 + SSH 金鑰認證
+- 📦 **統一依賴管理**: 使用單一 requirements.txt 避免版本衝突
+
+### 🔧 **重要系統改進**:
+- ✅ **統一 Python 依賴**: 所有服務使用同一個 requirements.txt 檔案
+- ✅ **Docker 構建優化**: 修正建構上下文，支援統一依賴載入
+- ✅ **自動代碼更新**: 部署時自動拉取最新代碼 (`git pull`)
+- ✅ **環境變數修正**: 修正 PYTHONPATH 讓模組正確載入
+- ✅ **MongoDB 配置簡化**: 移除不相容選項，確保穩定啟動
 
 ### 🎯 **使用建議**:
 - **測試階段**: 3台 VM (每月 ~4,020 TWD)

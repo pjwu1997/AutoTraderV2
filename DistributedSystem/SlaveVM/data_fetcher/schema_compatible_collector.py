@@ -11,6 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from DataFetcher.data_fetcher import DataFetcher
 from enhanced_long_short_collector import EnhancedLongShortCollector
 from enhanced_interest_collector import EnhancedInterestCollector
+from enhanced_funding_collector import EnhancedFundingCollector
 import time
 import logging
 from datetime import datetime, timedelta
@@ -31,8 +32,14 @@ class SchemaCompatibleCollector(DataFetcher):
         # 初始化增強收集器
         self.long_short_collector = EnhancedLongShortCollector()
         self.interest_collector = EnhancedInterestCollector()
+        self.funding_collector = EnhancedFundingCollector()
         
         logger.info(f"Schema Compatible Collector initialized for {slave_id}")
+    
+    def fetch_and_store(self, symbol: str):
+        """Override parent fetch_and_store to use enhanced method with per-symbol collections"""
+        print(f"🚀 OVERRIDDEN: fetch_and_store called for {symbol}, redirecting to enhanced")
+        return self.fetch_and_store_enhanced(symbol)
     
     def fetch_enhanced_long_short_data(self, symbol: str) -> Dict:
         """
@@ -41,7 +48,7 @@ class SchemaCompatibleCollector(DataFetcher):
         try:
             # 使用增強收集器獲取所有多空比資料
             all_long_short = self.long_short_collector.fetch_all_long_short_data(
-                symbol, period="5m", limit=1
+                symbol, period="1m", limit=1  # Changed to 1m for precision
             )
             
             # 轉換為兼容格式
@@ -156,7 +163,9 @@ class SchemaCompatibleCollector(DataFetcher):
             ohlcv = self.fetch_ohlcv(futures_symbol, since)
             spot_cvd = self.get_spot_cvd(binance_symbol, since, period=self.timeframe)
             cvd = self.fetch_cvd(futures_symbol, since)
-            fundings = self.fetch_funding_rate(futures_symbol, since)
+            
+            # 收集增強版 funding rate 資料 (current + next)
+            enhanced_funding = self.funding_collector.fetch_complete_funding_data(futures_symbol)
             
             # 收集增強版多空比資料
             enhanced_long_short = self.fetch_enhanced_long_short_data(futures_symbol)
@@ -170,7 +179,7 @@ class SchemaCompatibleCollector(DataFetcher):
                 "timestamp": timestamp,
                 "symbol": binance_symbol,
                 
-                # Futures 資料 (現有結構)
+                # Futures 資料 (現有結構 + 增強 funding rates)
                 "futures": {
                     "open": str(ohlcv[-1]["open"]) if ohlcv else "0",
                     "high": str(ohlcv[-1]["high"]) if ohlcv else "0", 
@@ -183,7 +192,14 @@ class SchemaCompatibleCollector(DataFetcher):
                     "taker_buy_quote": "0",  # 需要額外 API 獲取
                     "cvd": cvd[-1]["cvd"] if cvd else 0,
                     "calculated_volume": ohlcv[-1]["volume"] if ohlcv else 0,
-                    "funding_rate": fundings[-1]["funding_rate"] if fundings else 0
+                    
+                    # Enhanced funding rate data (current + next)
+                    "funding_rate": enhanced_funding.get("current_funding_rate", 0),
+                    "next_funding_rate": enhanced_funding.get("next_funding_rate", 0),
+                    "next_funding_time": enhanced_funding.get("next_funding_time", 0),
+                    "mark_price": enhanced_funding.get("mark_price", 0),
+                    "index_price": enhanced_funding.get("index_price", 0),
+                    "estimated_settle_price": enhanced_funding.get("estimated_settle_price", 0)
                 },
                 
                 # Long-Short Ratio 資料 (擴展現有結構)
@@ -244,15 +260,18 @@ class SchemaCompatibleCollector(DataFetcher):
                     "slave_id": self.slave_id,
                     "collection_timestamp": datetime.utcnow().isoformat(),
                     "data_version": "enhanced_v2",
-                    "apis_called": ["ohlcv", "funding_rate", "long_short_ratios", "open_interest"]
+                    "apis_called": ["ohlcv", "funding_rate", "premium_index", "long_short_ratios", "open_interest"]
                 }
             }
             
-            # 儲存到 MongoDB
-            collection = self.db["market_data"]
+            # 儲存到 MongoDB - 使用每個符號的專屬集合
+            collection_name = f"{symbol}_{self.timeframe}"
+            print(f"🔥 DEBUG: Storing {symbol} in collection {collection_name} with timeframe {self.timeframe}")
+            logger.info(f"🔥 DEBUG: About to store in collection {collection_name}")
+            collection = self.db[collection_name]
             collection.insert_one(data)
             
-            logger.info(f"Successfully stored enhanced data for {symbol}")
+            logger.info(f"Successfully stored enhanced data for {symbol} in {collection_name}")
             return data
             
         except Exception as e:
@@ -268,7 +287,7 @@ def test_schema_compatibility():
     collector = SchemaCompatibleCollector(
         slave_id="test-slave",
         exchange_name="binance",
-        timeframe="5m"
+        timeframe="1m"  # Changed to 1m for precision
     )
     
     test_symbol = "BTC/USDT:USDT"

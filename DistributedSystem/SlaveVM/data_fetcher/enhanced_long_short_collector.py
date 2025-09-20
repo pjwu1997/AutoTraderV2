@@ -21,7 +21,7 @@ class EnhancedLongShortCollector:
         self.exchange = getattr(ccxt, exchange_name)()
         self.base_url = "https://fapi.binance.com"
         
-    def fetch_global_long_short_ratio(self, symbol: str, period: str = "5m", limit: int = 30) -> List[Dict]:
+    def fetch_global_long_short_ratio(self, symbol: str, period: str = "1m", limit: int = 30) -> List[Dict]:
         """
         獲取全域多空比 (所有用戶)
         API: /futures/data/globalLongShortAccountRatio
@@ -33,7 +33,7 @@ class EnhancedLongShortCollector:
             url = f"{self.base_url}/futures/data/globalLongShortAccountRatio"
             params = {
                 "symbol": binance_symbol,
-                "period": period,  # 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
+                "period": period,  # 1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d
                 "limit": limit
             }
             

@@ -10,7 +10,7 @@ import schedule
 #from load_markets import load_perpetual_markets_for_binance
 
 class DataFetcher:
-    def __init__(self, exchange_name, db_uri="mongodb://mongo:27017/", db_name="trading_data", timeframe="5m"):
+    def __init__(self, exchange_name, db_uri="mongodb://mongo:27017/", db_name="trading_data", timeframe="1m"):
         # Initialize MongoDB connection
         self.client = MongoClient(db_uri)
         self.db = self.client[db_name]
@@ -22,7 +22,11 @@ class DataFetcher:
         self.timeframe = timeframe
 
     def clean_db(self):
-        self.db.market_data.delete_many({})
+        """Clean all symbol collections"""
+        collection_names = self.db.list_collection_names()
+        for collection_name in collection_names:
+            if "_1m" in collection_name or "_5m" in collection_name:  # Clean timeframe collections
+                self.db[collection_name].delete_many({})
 
     def fetch_ohlcv(self, symbol, since):
         """Fetch OHLCV data."""
@@ -213,9 +217,10 @@ class DataFetcher:
             "timestamp": timestamp,
         }
 
-        # Store data in MongoDB
-        print(f"Storing data for {symbol}...")
-        self.store_data("market_data", symbol, data)
+        # Store data in MongoDB - using per-symbol collections
+        collection_name = f"{symbol}_{self.timeframe}"
+        print(f"Storing data for {symbol} in collection {collection_name}...")
+        self.store_data(collection_name, symbol, data)
 
 
     def test_fetch(self, symbol):
@@ -240,7 +245,8 @@ class DataFetcher:
 
     def fetch_latest(self, symbol):
         """Fetch and store the latest data for a single symbol."""
-        collection = self.db["market_data"]
+        collection_name = f"{symbol}_{self.timeframe}"
+        collection = self.db[collection_name]
 
         # Find the latest timestamp for the symbol in the database
         latest_entry = collection.find_one(
