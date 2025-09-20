@@ -10,7 +10,7 @@ from datetime import datetime
 # Add path to the unified collector
 sys.path.append('/Users/pj/Desktop/projects/AutoTraderV2/DistributedSystem/SlaveVM/data_fetcher')
 
-from unified_collector_1m import UnifiedCollector1M, CollectorConfig
+from unified_collector import UnifiedCollector1M, CollectorConfig
 
 async def test_1m_aggregated_collector():
     """Test the 1-minute aggregated collector"""

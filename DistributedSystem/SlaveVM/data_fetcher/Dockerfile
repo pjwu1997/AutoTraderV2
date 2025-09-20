@@ -1,41 +1,32 @@
 FROM python:3.11-slim
 
-# 安裝系統依賴
+WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     netcat-openbsd \
-    gcc \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 設定工作目錄
-WORKDIR /app
-
-# 複製統一的 requirements
+# Copy requirements and install Python packages
 COPY DistributedSystem/requirements.txt .
-
-# 安裝 Python 依賴
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 複製原始 DataFetcher (依賴) 
+# Copy source files
 COPY DataFetcher/ DataFetcher/
-
-# 複製分散式資料收集器
-COPY DistributedSystem/SlaveVM/data_fetcher/distributed_data_fetcher.py .
-
-# 複製共用模組
 COPY DistributedSystem/Common/ Common/
+COPY DistributedSystem/SlaveVM/data_fetcher/ .
 
-# 建立日誌和資料目錄
-RUN mkdir -p logs data
+# Create logs directory
+RUN mkdir -p logs
 
-# 設定環境變數
+# Set environment variables
 ENV PYTHONPATH="/app:/app/DataFetcher:/app/Common"
 ENV PYTHONUNBUFFERED=1
 
-# 健康檢查
+# Health check
 HEALTHCHECK --interval=60s --timeout=30s --start-period=10s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8081/health', timeout=5)" || exit 1
 
-# 啟動命令
-CMD ["python", "distributed_data_fetcher.py"]
+# Run the unified collector (1-minute aggregated)
+CMD ["python", "run_unified_collector.py"]

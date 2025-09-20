@@ -4,11 +4,11 @@
 version: '3.8'
 
 services:
-  # 統一資料收集器 (REST API + WebSocket) - 連接到 Master MongoDB
+  # 統一資料收集器 (1分鐘聚合) - 連接到 Master MongoDB
   unified-collector:
     build:
       context: ../../..
-      dockerfile: DistributedSystem/SlaveVM/data_fetcher/Dockerfile.unified
+      dockerfile: DistributedSystem/SlaveVM/data_fetcher/Dockerfile
     container_name: ${SLAVE_ID}-unified-collector
     environment:
       - SLAVE_ID=${SLAVE_ID}
