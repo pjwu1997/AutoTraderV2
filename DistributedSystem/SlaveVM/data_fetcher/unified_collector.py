@@ -270,12 +270,12 @@ class UnifiedCollector1M:
             base_url = "https://fapi.binance.com"
             ratios = {}
             
-            # Global long/short account ratio (1m period)
+            # Global long/short account ratio (5m period - 1m not supported)
             try:
                 url = f"{base_url}/futures/data/globalLongShortAccountRatio"
                 response = requests.get(url, params={
                     "symbol": symbol_clean,
-                    "period": "1m",
+                    "period": "5m",
                     "limit": 1
                 }, timeout=10)
                 
@@ -291,12 +291,12 @@ class UnifiedCollector1M:
             except Exception as e:
                 logger.debug(f"Failed to fetch global account ratio for {symbol}: {e}")
             
-            # Top trader long/short ratio (1m period)
+            # Top trader long/short ratio (5m period - 1m not supported)
             try:
                 url = f"{base_url}/futures/data/topLongShortAccountRatio"
                 response = requests.get(url, params={
                     "symbol": symbol_clean,
-                    "period": "1m",
+                    "period": "5m",
                     "limit": 1
                 }, timeout=10)
                 
@@ -312,12 +312,12 @@ class UnifiedCollector1M:
             except Exception as e:
                 logger.debug(f"Failed to fetch top trader ratio for {symbol}: {e}")
             
-            # Top position long/short ratio (1m period)
+            # Top position long/short ratio (5m period - 1m not supported)
             try:
                 url = f"{base_url}/futures/data/topLongShortPositionRatio"
                 response = requests.get(url, params={
                     "symbol": symbol_clean,
-                    "period": "1m",
+                    "period": "5m",
                     "limit": 1
                 }, timeout=10)
                 
