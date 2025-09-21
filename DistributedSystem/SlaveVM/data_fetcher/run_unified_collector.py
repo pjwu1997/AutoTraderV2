@@ -17,11 +17,14 @@ from unified_collector import UnifiedCollector1M, CollectorConfig
 
 def setup_logging():
     """Setup logging configuration"""
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('logs/unified_collector_1m.log'),
+            logging.FileHandler('logs/unified_collector.log'),
             logging.StreamHandler()
         ]
     )
@@ -66,11 +69,11 @@ def load_config_from_env() -> CollectorConfig:
 
 async def main():
     """Main execution function"""
+    # Setup logging first
+    setup_logging()
+    logger = logging.getLogger(__name__)
+    
     try:
-        # Setup logging
-        setup_logging()
-        logger = logging.getLogger(__name__)
-        
         logger.info("🚀 Starting 1-Minute Aggregated Unified Collector")
         
         # Load configuration

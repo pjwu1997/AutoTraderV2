@@ -1,0 +1,20 @@
+2025-09-21 14:27:19,635 - __main__ - INFO - 🚀 Starting 1-Minute Aggregated Unified Collector
+2025-09-21 14:27:19,635 - __main__ - INFO - Configuration loaded:
+2025-09-21 14:27:19,635 - __main__ - INFO -   Slave ID: local-test-slave
+2025-09-21 14:27:19,635 - __main__ - INFO -   Symbols: 2 symbols
+2025-09-21 14:27:19,635 - __main__ - INFO -   MongoDB: mongodb://localhost:27017/
+2025-09-21 14:27:19,635 - __main__ - INFO -   Aggregation Interval: 60s
+2025-09-21 14:27:24,689 - unified_collector - WARNING - MongoDB not available: localhost:27017: [Errno 61] Connection refused (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms), Timeout: 5.0s, Topology Description: <TopologyDescription id: 68cf9ac71b4ffc05d2f9313f, topology_type: Unknown, servers: [<ServerDescription ('localhost', 27017) server_type: Unknown, rtt: None, error=AutoReconnect('localhost:27017: [Errno 61] Connection refused (configured timeouts: socketTimeoutMS: 20000.0ms, connectTimeoutMS: 20000.0ms)')>]>
+2025-09-21 14:27:24,689 - __main__ - INFO - ✅ 1-Minute Aggregated Unified Collector started successfully
+2025-09-21 14:27:24,689 - __main__ - INFO - 📊 Data will be aggregated every minute with:
+2025-09-21 14:27:24,689 - __main__ - INFO -    • Trade volumes and counts
+2025-09-21 14:27:24,689 - __main__ - INFO -    • Liquidation amounts
+2025-09-21 14:27:24,689 - __main__ - INFO -    • Orderbook depth metrics
+2025-09-21 14:27:24,689 - __main__ - INFO -    • Enhanced 1-minute metrics
+2025-09-21 14:27:24,689 - unified_collector - INFO - Starting continuous 1-minute aggregated collection
+2025-09-21 14:28:16,611 - __main__ - INFO - 🚀 Starting 1-Minute Aggregated Unified Collector
+2025-09-21 14:28:16,611 - __main__ - INFO - Configuration loaded:
+2025-09-21 14:28:16,611 - __main__ - INFO -   Slave ID: test-slave
+2025-09-21 14:28:16,611 - __main__ - INFO -   Symbols: 1 symbols
+2025-09-21 14:28:16,611 - __main__ - INFO -   MongoDB: mongodb://localhost:27017/
+2025-09-21 14:28:16,611 - __main__ - INFO -   Aggregation Interval: 60s
