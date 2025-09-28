@@ -265,7 +265,7 @@ async def init_app():
     app.router.add_get("/api/slaves", handle_slaves)
     
     # 靜態檔案服務 (Dashboard)
-    app.router.add_static("/", path="templates", name="static")
+    app.router.add_static("/", path=str(Path(__file__).parent.parent / 'templates'), name="static")
     
     # 清理處理
     async def cleanup_handler(app):

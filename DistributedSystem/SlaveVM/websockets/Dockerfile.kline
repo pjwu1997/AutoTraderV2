@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy unified requirements
-COPY DistributedSystem/requirements.txt .
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir websockets apscheduler
 
 # Copy WebSocket modules
-COPY DistributedSystem/SlaveVM/websockets/ websockets/
+COPY SlaveVM/websockets/ websockets/
 
 # Set environment variables
 ENV PYTHONPATH="/app:/app/websockets"

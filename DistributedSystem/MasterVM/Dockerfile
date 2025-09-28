@@ -17,16 +17,16 @@ COPY requirements.txt .
 # 安裝 Python 依賴
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 複製應用程式碼
+# 複製 MasterVM 原始碼
 COPY MasterVM/src/ src/
-COPY MasterVM/config/ config/
 COPY MasterVM/templates/ templates/
 
 # 複製共用模組
 COPY Common/ Common/
 
 # 建立日誌目錄
-RUN mkdir -p logs
+RUN mkdir -p /app/logs
+
 
 # 設定環境變數
 ENV PYTHONPATH="/app:/app/Common"

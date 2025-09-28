@@ -28,9 +28,7 @@ from collections import defaultdict
 from pymongo import MongoClient
 from dataclasses import dataclass, field
 
-# Add parent directories to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
-from DataFetcher.data_fetcher import DataFetcher
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +46,7 @@ class CollectorConfig:
     max_retries: int = 3
     enable_websocket: bool = True
     enable_rest_api: bool = True
+    symbols_file_path: Optional[str] = None
 
 @dataclass
 class MinuteAggregation:
@@ -619,9 +618,20 @@ class UnifiedCollector1M:
 async def main():
     """Main function for testing"""
     # Load configuration from environment
+    hostname = os.getenv("HOSTNAME")
+    pod_index = hostname.split('-')[-1]
+    symbols_file_path = f"/config/{pod_index}/symbols.csv"
+    try:
+        with open(symbols_file_path, 'r') as f:
+            symbols = [symbol.strip() for symbol in f.read().split(',') if symbol.strip()]
+        logger.info(f"Loaded {len(symbols)} symbols from {symbols_file_path}")
+    except Exception as e:
+        logger.error(f"Failed to read symbols from {symbols_file_path}: {e}")
+        symbols = []
+
     config = CollectorConfig(
         slave_id=os.getenv("SLAVE_ID", "test-slave"),
-        symbols=os.getenv("SYMBOLS", "BTC/USDT:USDT,ETH/USDT:USDT").split(","),
+        symbols=symbols,
         mongo_uri=os.getenv("MONGO_URI", "mongodb://localhost:27017/"),
         mongo_db_name=os.getenv("MONGO_DB_NAME", "trading_data"),
         timeframe=os.getenv("TIMEFRAME", "1m"),

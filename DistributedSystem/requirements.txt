@@ -22,7 +22,7 @@ numpy==1.25.2
 ccxt==4.1.64
 
 # System monitoring
-psutil==5.9.6
+# psutil==5.9.6
 
 # Time handling
 pytz==2023.3

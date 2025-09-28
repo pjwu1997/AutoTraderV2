@@ -2,31 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install Python packages
-COPY DistributedSystem/requirements.txt .
+# Copy requirements and install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source files
-COPY DataFetcher/ DataFetcher/
-COPY DistributedSystem/Common/ Common/
-COPY DistributedSystem/SlaveVM/data_fetcher/ .
+# Copy source code
+COPY Common/ Common/
+COPY SlaveVM/data_fetcher/ .
 
 # Create logs directory
-RUN mkdir -p logs
+RUN mkdir -p /app/logs
 
-# Set environment variables
-ENV PYTHONPATH="/app:/app/DataFetcher:/app/Common"
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH="/app"
 
-# Health check
-HEALTHCHECK --interval=60s --timeout=30s --start-period=10s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8081/health', timeout=5)" || exit 1
-
-# Run the unified collector (1-minute aggregated)
-CMD ["python", "run_unified_collector.py"]
+# Command to run the application
+CMD ["python3", "unified_collector.py"]

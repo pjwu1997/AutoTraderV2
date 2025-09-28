@@ -12,16 +12,16 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # 複製統一的 requirements
-COPY DistributedSystem/requirements.txt .
+COPY requirements.txt .
 
 # 安裝 Python 依賴
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製健康檢查程序
-COPY DistributedSystem/SlaveVM/health_checker/slave_health.py .
+COPY SlaveVM/health_checker/slave_health.py .
 
 # 複製共用模組
-COPY DistributedSystem/Common/ Common/
+COPY Common/ Common/
 
 # 建立日誌目錄
 RUN mkdir -p logs
