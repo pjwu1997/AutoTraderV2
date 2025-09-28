@@ -60,14 +60,33 @@ class DistributedWebSocketController(ABC):
         self.db = self.client[mongo_db_name]
 
         # Symbol configuration for distributed system
-        if symbols:
-            self.symbols = symbols
-        elif symbols_env:
-            self.symbols = [s.strip() for s in symbols_env.split(",")]
+        symbols_env = os.getenv("SYMBOLS")
+        if symbols_env:
+            self.symbols = [s.strip() for s in symbols_env.split(',') if s.strip()]
+            logger.info(f"Loaded {len(self.symbols)} symbols from SYMBOLS env var")
         else:
-            logger.error("Must provide symbols list or set SYMBOLS environment variable", 
-                        extra={'operation': 'init', 'slave_id': self.slave_id})
-            raise ValueError("Must provide symbols list or set SYMBOLS environment variable")
+            symbols_file_path = os.getenv("SYMBOLS_FILE_PATH")
+            if not symbols_file_path:
+                hostname = os.getenv("HOSTNAME")
+                if hostname:
+                    pod_index = hostname.split('-')[-1]
+                    symbols_file_path = f"/config/{pod_index}/symbols.csv"
+                else:
+                    self.symbols = []
+            
+            if symbols_file_path:
+                try:
+                    with open(symbols_file_path, 'r') as f:
+                        self.symbols = [s.strip() for s in f.read().split(',') if s.strip()]
+                    logger.info(f"Loaded {len(self.symbols)} symbols from {symbols_file_path}")
+                except Exception as e:
+                    logger.error(f"Failed to read symbols from {symbols_file_path}: {e}")
+                    self.symbols = []
+            else:
+                self.symbols = []
+
+        if not self.symbols:
+            raise ValueError("Must provide symbols list, set SYMBOLS environment variable, or set SYMBOLS_FILE_PATH environment variable")
 
         # Create collections for each symbol
         self.collections = {symbol: self.db[symbol] for symbol in self.symbols}

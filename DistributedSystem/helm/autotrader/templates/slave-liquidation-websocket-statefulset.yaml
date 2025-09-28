@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "autotrader.fullname" . }}-slave-liquidation-websocket
+  labels:
+    {{- include "autotrader.labels" . | nindent 4 }}
+    app.kubernetes.io/component: slave-liquidation-websocket
+spec:
+  replicas: {{ .Values.slave.replicaCount }}
+  serviceName: {{ include "autotrader.fullname" . }}-slave-liquidation-websocket
+  selector:
+    matchLabels:
+      {{- include "autotrader.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: slave-liquidation-websocket
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "autotrader.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: slave-liquidation-websocket
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "autotrader.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+      {{- range $i, $e := until (int .Values.slave.replicaCount) }}
+        - name: symbols-config-{{ $i }}
+          configMap:
+            name: {{ include "autotrader.fullname" $ }}-slave-symbols-{{ $i }}
+      {{- end }}
+      containers:
+        - name: liquidation-websocket
+          image: "{{ .Values.slave.image.liquidation_websocket.repository }}:{{ .Values.slave.image.liquidation_websocket.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.slave.image.liquidation_websocket.pullPolicy }}
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "autotrader.fullname" . }}-mongodb
+                  key: mongo-uri
+            {{- range $key, $val := .Values.slave.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+          volumeMounts:
+          {{- range $i, $e := until (int .Values.slave.replicaCount) }}
+            - name: symbols-config-{{ $i }}
+              mountPath: /config/{{ $i }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
