@@ -90,8 +90,10 @@ def distribute_symbols(symbols, num_slaves):
     return distribution
 
 def clean_symbol(symbol):
-    """Removes the :USDT suffix from the symbol if it exists."""
-    return symbol.split(':')[0]
+    """Cleans the symbol by removing ':USDT' suffix and '/' character, then converts to uppercase."""
+    cleaned = symbol.split(':')[0]  # Remove :USDT suffix
+    cleaned = cleaned.replace('/', '') # Remove / character
+    return cleaned.upper() # Convert to uppercase
 
 def create_or_update_configmap(core_v1_api, slave_index, symbols_list):
     """Creates or updates a Kubernetes ConfigMap for a slave."""

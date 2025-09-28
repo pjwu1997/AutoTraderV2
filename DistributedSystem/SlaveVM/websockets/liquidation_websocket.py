@@ -78,6 +78,7 @@ class DistributedLiquidationWebSocket(DistributedWebSocketController):
     def on_message(self, ws, message):
         """Process liquidation messages with 1-minute precision aggregation"""
         try:
+            logger.debug(f"Raw WebSocket message: {message}", extra={'operation': 'on_message', 'slave_id': self.slave_id})
             data = json.loads(message)
             order = data["o"]
 
@@ -116,9 +117,8 @@ class DistributedLiquidationWebSocket(DistributedWebSocketController):
                         extra={'symbol': symbol, 'operation': 'on_message', 'slave_id': self.slave_id})
                         
         except Exception as e:
-            logger.error(f"Slave {self.slave_id} error processing liquidation message: {e}", 
+            logger.error(f"Slave {self.slave_id} error processing liquidation message: {e}. Raw message: {message}",
                         extra={'operation': 'on_message', 'slave_id': self.slave_id})
-
     def save_data(self):
         """Save aggregated liquidation data to MongoDB with 1-minute precision"""
         try:
@@ -282,19 +282,37 @@ def main():
     """Main entry point for distributed liquidation websocket service"""
     # Get configuration from environment
     slave_id = os.getenv("SLAVE_ID", "unknown-slave")
-    
-    logger.info(f"Starting Distributed Liquidation WebSocket Service for slave {slave_id}", 
+
+    logger.info(f"Starting Distributed Liquidation WebSocket Service for slave {slave_id}",
                extra={'operation': 'main', 'slave_id': slave_id})
-    
+
+    # Load symbols from file
+    hostname = os.getenv("HOSTNAME")
+    if not hostname:
+        logger.error("HOSTNAME environment variable not set.")
+        sys.exit(1)
+    pod_index = hostname.split('-')[-1]
+    symbols_file_path = f"/config/{pod_index}/symbols.csv"
+
+    try:
+        with open(symbols_file_path, 'r') as f:
+            symbols = [symbol.strip() for symbol in f.read().split(',') if symbol.strip()]
+        logger.info(f"Loaded {len(symbols)} symbols from {symbols_file_path}")
+    except Exception as e:
+        logger.error(f"Failed to read symbols from {symbols_file_path}: {e}")
+        symbols = []
+        sys.exit(1) # Exit if symbols cannot be loaded
+
     # Create and start the websocket service
-    ws = DistributedLiquidationWebSocket(slave_id=slave_id)
-    
+    ws = DistributedLiquidationWebSocket(symbols=symbols, slave_id=slave_id)
+
     try:
         ws.connect()
     except KeyboardInterrupt:
-        logger.info(f"Slave {slave_id} LiquidationWebSocket stopped by user", 
+        logger.info(f"Slave {slave_id} LiquidationWebSocket stopped by user",
                    extra={'operation': 'main', 'slave_id': slave_id})
         ws.stop()
-
 if __name__ == "__main__":
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(level=getattr(logging, log_level))
     main()

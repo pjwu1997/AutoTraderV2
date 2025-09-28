@@ -1,0 +1,37 @@
+# Master VM Docker Compose 配置
+# 部署在協調監控的主機上
+
+version: '3.8'
+
+services:
+  
+  # 共享 MongoDB - 所有資料彙整處
+  shared-mongo:
+    image: mongo:7.0
+    container_name: shared-mongo
+    ports:
+      - "27017:27017"  # 允許外部連接
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=${MONGO_DB_NAME:-trading_data}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - distributed-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 0.2G
+          cpus: '0.2'
+    command: mongod --bind_ip_all
+networks:
+  distributed-net:
+    driver: bridge
+volumes:
+  mongodb_data:
+    driver: local

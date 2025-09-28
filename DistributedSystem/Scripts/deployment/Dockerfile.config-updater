@@ -1,0 +1,14 @@
+# Dockerfile for the k8s-config-updater cronjob
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt kubernetes
+
+# Copy the script
+COPY Scripts/deployment/generate_k8s_configs.py .
+
+# The script will be run by the Kubernetes CronJob
+CMD ["python3", "generate_k8s_configs.py"]

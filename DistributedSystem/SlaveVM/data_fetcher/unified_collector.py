@@ -21,6 +21,7 @@ import ccxt
 import requests
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 import statistics
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, DefaultDict
@@ -139,6 +140,7 @@ class UnifiedCollector1M:
         """Continuously collect real-time data for 1-minute aggregation"""
         while True:
             try:
+                logger.debug(f"Attempting to collect real-time data for {symbol}")
                 buffer = self.get_or_create_minute_buffer(symbol)
                 
                 # Collect orderbook snapshot (every 5 seconds)
@@ -481,6 +483,7 @@ class UnifiedCollector1M:
                 logger.warning(f"No minute buffer found for {symbol}")
                 return None
             
+            logger.debug(f"Generating 1-minute aggregated data for {symbol}")
             # Get OHLCV for the minute (this is already 1-minute from exchange)
             ohlcv = self.exchange.fetchOHLCV(symbol, '1m', limit=1)
             current_minute_candle = ohlcv[-1] if ohlcv else None
@@ -546,6 +549,7 @@ class UnifiedCollector1M:
             logger.debug("MongoDB not available, skipping storage")
             return
         
+        logger.debug(f"Attempting to store aggregated data for {symbol} to MongoDB")
         try:
             collection_name = f"{symbol.replace('/', '').replace(':USDT', '')}_1m_aggregated"
             collection = self.db[collection_name]
@@ -642,5 +646,13 @@ async def main():
     await collector.start_continuous_collection()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper()),
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        RotatingFileHandler('unified_collector.log', maxBytes=10*1024*1024, backupCount=5),  # Rotate logs at 10MB
+        logging.StreamHandler()  # Also print to console
+    ]
+)
     asyncio.run(main())

@@ -1,0 +1,23 @@
+<html>
+<head>
+    <title>AutoTrader Dashboard</title>
+</head>
+<body>
+    <h1>AutoTrader System Status</h1>
+    <div id="status">Loading...</div>
+    <script>
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                document.getElementById('status').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('status').innerText = 'Error loading status.';
+                console.error('Error fetching status:', error);
+            }
+        }
+        setInterval(fetchStatus, 5000);
+        fetchStatus();
+    </script>
+</body>
+</html>

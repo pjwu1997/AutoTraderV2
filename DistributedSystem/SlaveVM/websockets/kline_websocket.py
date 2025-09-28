@@ -95,13 +95,14 @@ class DistributedKlineWebSocket(DistributedWebSocketController):
         """Process incoming WebSocket kline messages with 1-minute precision"""
         try:
             data = json.loads(message)
+            logger.debug(f"Raw WebSocket message: {message}", extra={'operation': 'on_message', 'market_type': market_type, 'slave_id': self.slave_id})
             
             # Handle both single stream and combined stream formats
             if "stream" in data:  # Combined stream format
                 stream_data = data["data"]
                 k = stream_data["k"]
             else:  # Single stream format
-                k = data["data"]["k"]
+                k = data["k"]
             
             symbol = k["s"]
             
@@ -153,9 +154,8 @@ class DistributedKlineWebSocket(DistributedWebSocketController):
                         extra={'operation': 'on_message', 'symbol': symbol, 'market_type': market_type, 'slave_id': self.slave_id})
 
         except Exception as e:
-            logger.error(f"Slave {self.slave_id} error processing message: {e}", 
+            logger.error(f"Slave {self.slave_id} error processing message: {e}. Raw message: {message}",
                         extra={'operation': 'on_message', 'market_type': market_type, 'slave_id': self.slave_id})
-
     def save_data(self):
         """Periodic data save - mainly for logging and health checks"""
         try:
@@ -179,19 +179,37 @@ async def main():
     # Get configuration from environment
     slave_id = os.getenv("SLAVE_ID", "unknown-slave")
     interval = os.getenv("KLINE_INTERVAL", "1m")
-    
-    logger.info(f"Starting Distributed Kline WebSocket Service for slave {slave_id}", 
+
+    logger.info(f"Starting Distributed Kline WebSocket Service for slave {slave_id}",
                extra={'operation': 'main', 'slave_id': slave_id})
-    
+
+    # Load symbols from file
+    hostname = os.getenv("HOSTNAME")
+    if not hostname:
+        logger.error("HOSTNAME environment variable not set.")
+        sys.exit(1)
+    pod_index = hostname.split('-')[-1]
+    symbols_file_path = f"/config/{pod_index}/symbols.csv"
+
+    try:
+        with open(symbols_file_path, 'r') as f:
+            symbols = [symbol.strip() for symbol in f.read().split(',') if symbol.strip()]
+        logger.info(f"Loaded {len(symbols)} symbols from {symbols_file_path}")
+    except Exception as e:
+        logger.error(f"Failed to read symbols from {symbols_file_path}: {e}")
+        symbols = []
+        sys.exit(1) # Exit if symbols cannot be loaded
+
     # Create and start the websocket service
-    ws = DistributedKlineWebSocket(interval=interval, slave_id=slave_id)
-    
+    ws = DistributedKlineWebSocket(symbols=symbols, interval=interval, slave_id=slave_id)
+
     try:
         await ws.connect()
     except KeyboardInterrupt:
-        logger.info(f"Slave {slave_id} KlineWebSocket stopped by user", 
+        logger.info(f"Slave {slave_id} KlineWebSocket stopped by user",
                    extra={'operation': 'main', 'slave_id': slave_id})
         ws.stop()
-
 if __name__ == "__main__":
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(level=getattr(logging, log_level))
     asyncio.run(main())

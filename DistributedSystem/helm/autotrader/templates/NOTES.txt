@@ -1,0 +1,15 @@
+{{- $fullName := include "autotrader.fullname" . -}}
+{{- $masterPort := .Values.master.port -}}
+{{- $masterService := printf "%s-master" $fullName -}}
+
+Your AutoTrader application has been deployed to Kubernetes.
+
+To access the Master Dashboard, you can use port-forwarding:
+
+  export MASTER_POD=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "autotrader.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=master" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl --namespace {{ .Release.Namespace }} port-forward $MASTER_POD 8080:{{ $masterPort }}
+
+You can also get the status of the system by calling the Master API:
+
+  curl http://127.0.0.1:8080/api/status

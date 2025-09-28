@@ -48,12 +48,16 @@ spec:
             - name: MONGO_URI
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "autotrader.fullname" . }}-mongodb
+                  name: autotrader-mongodb-secret
                   key: mongo-uri
-            {{- range $key, $val := .Values.slave.env }}
-            - name: {{ $key }}
-              value: {{ $val | quote }}
-            {{- end }}
+            - name: MONGO_DB_NAME
+              value: {{ .Values.slave.mongo_db_name | quote }}
+            - name: HEALTH_PORT
+              value: {{ .Values.slave.healthPort | quote }}
+            - name: TEST_MODE
+              value: {{ .Values.slave.env.TEST_MODE | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.slave.env.LOG_LEVEL | quote }}
           volumeMounts:
           {{- range $i, $e := until (int .Values.slave.replicaCount) }}
             - name: symbols-config-{{ $i }}

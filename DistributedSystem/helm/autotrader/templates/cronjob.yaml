@@ -1,0 +1,32 @@
+{{- if .Values.cronjob.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "autotrader.fullname" . }}-config-updater
+  labels:
+    {{- include "autotrader.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config-updater
+spec:
+  schedule: "{{ .Values.cronjob.schedule }}"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "autotrader.fullname" . }}-config-updater
+          restartPolicy: OnFailure
+          containers:
+            - name: config-updater
+              image: "{{ .Values.cronjob.image.repository }}:{{ .Values.cronjob.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.cronjob.image.pullPolicy }}
+              env:
+                - name: K8S_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: K8S_SLAVE_STATEFULSET
+                  value: "{{ include "autotrader.fullname" . }}-slave"
+                - name: K8S_CONFIGMAP_BASENAME
+                  value: "{{ include "autotrader.fullname" . }}-slave-symbols"
+                - name: HELM_CHART_NAME
+                  value: {{ include "autotrader.name" . | quote }}
+{{- end }}
