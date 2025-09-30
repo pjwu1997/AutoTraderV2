@@ -43,19 +43,22 @@ def load_config_from_env() -> CollectorConfig:
     formatted_symbols = []
     for symbol in symbols:
         if ':' not in symbol and '/' not in symbol:
-            # Convert BTCUSDT to BTC/USDT:USDT
+            # Convert BTCUSDT to BTC/USDT
             if symbol.endswith('USDT'):
                 base = symbol[:-4]
-                formatted_symbol = f"{base}/USDT:USDT"
+                formatted_symbol = f"{base}/USDT"
             else:
                 formatted_symbol = symbol
         else:
             formatted_symbol = symbol
         formatted_symbols.append(formatted_symbol)
+
+    # Remove duplicates and sort to ensure consistent order
+    unique_symbols = sorted(list(set(formatted_symbols)))
     
     return CollectorConfig(
         slave_id=os.getenv("SLAVE_ID", "slave-unknown"),
-        symbols=formatted_symbols,
+        symbols=unique_symbols,
         mongo_uri=os.getenv("MONGO_URI", "mongodb://localhost:27017/"),
         mongo_db_name=os.getenv("MONGO_DB_NAME", "trading_data"),
         timeframe=os.getenv("TIMEFRAME", "1m"),
@@ -95,7 +98,9 @@ async def main():
         logger.info("   • Orderbook depth metrics")
         logger.info("   • Enhanced 1-minute metrics")
         
+        logger.info("Attempting to start continuous collection...")
         await collector.start_continuous_collection()
+        logger.critical("CRITICAL: Unified collector main function has exited. This indicates a silent failure.")
         
     except KeyboardInterrupt:
         logger.info("⏹️  Collector stopped by user")

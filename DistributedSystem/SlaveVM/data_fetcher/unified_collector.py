@@ -17,8 +17,8 @@ import os
 import asyncio
 import websockets
 import json
-import ccxt
-import requests
+import ccxt.async_support as ccxt
+import aiohttp
 import time
 import logging
 from logging.handlers import RotatingFileHandler
@@ -85,7 +85,10 @@ class UnifiedCollector1M:
     """
     
     def __init__(self, config: CollectorConfig):
+        logger.info(f"UnifiedCollector1M initializing with {len(config.symbols)} symbols.")
         self.config = config
+        # Defensively ensure symbols are unique and sorted
+        self.config.symbols = sorted(list(set(self.config.symbols)))
         self.slave_id = config.slave_id
         
         # Initialize exchanges
@@ -129,6 +132,7 @@ class UnifiedCollector1M:
         
         # Check if we need a new buffer (new minute)
         if symbol not in self.minute_buffers or self.minute_buffers[symbol].minute_start != current_minute:
+            logger.info(f"Creating new minute buffer for {symbol} at minute {current_minute}")
             self.minute_buffers[symbol] = MinuteAggregation(
                 symbol=symbol,
                 minute_start=current_minute
@@ -138,36 +142,43 @@ class UnifiedCollector1M:
     
     async def collect_real_time_data(self, symbol: str):
         """Continuously collect real-time data for 1-minute aggregation"""
-        while True:
-            try:
-                logger.debug(f"Attempting to collect real-time data for {symbol}")
-                buffer = self.get_or_create_minute_buffer(symbol)
-                
-                # Collect orderbook snapshot (every 5 seconds)
-                orderbook = await self._fetch_orderbook_snapshot(symbol)
-                if orderbook:
-                    buffer.orderbook_snapshots.append({
-                        'timestamp': int(time.time() * 1000),
-                        'data': orderbook
-                    })
-                
-                # Collect recent trades (every 5 seconds)
-                trades = await self._fetch_recent_trades_for_aggregation(symbol)
-                for trade in trades:
-                    self._aggregate_trade(buffer, trade)
-                
-                # Update latest rates (every 10 seconds)
-                if len(buffer.orderbook_snapshots) % 2 == 0:  # Every 10 seconds
-                    buffer.latest_funding_rate = await self._fetch_funding_rate(symbol)
-                    buffer.latest_long_short_ratios = await self._fetch_long_short_ratios(symbol)
-                    buffer.latest_open_interest = await self._fetch_open_interest(symbol)
-                    buffer.latest_ticker = await self._fetch_ticker(symbol)
-                
-                await asyncio.sleep(5)  # Collect every 5 seconds
-                
-            except Exception as e:
-                logger.error(f"Error in real-time collection for {symbol}: {e}")
-                await asyncio.sleep(5)
+        logger.info(f"Real-time collection task started for {symbol}.")
+        try:
+            while True:
+                try:
+                    logger.debug(f"Attempting to collect real-time data for {symbol}")
+                    buffer = self.get_or_create_minute_buffer(symbol)
+                    
+                    # Collect orderbook snapshot (every 5 seconds)
+                    orderbook = await self._fetch_orderbook_snapshot(symbol)
+                    if orderbook:
+                        buffer.orderbook_snapshots.append({
+                            'timestamp': int(time.time() * 1000),
+                            'data': orderbook
+                        })
+                    
+                    # Collect recent trades (every 5 seconds)
+                    trades = await self._fetch_recent_trades_for_aggregation(symbol)
+                    for trade in trades:
+                        self._aggregate_trade(buffer, trade)
+                    
+                    # Update latest rates (every 10 seconds)
+                    if len(buffer.orderbook_snapshots) % 2 == 0:  # Every 10 seconds
+                        buffer.latest_funding_rate = await self._fetch_funding_rate(symbol)
+                        buffer.latest_long_short_ratios = await self._fetch_long_short_ratios(symbol)
+                        buffer.latest_open_interest = await self._fetch_open_interest(symbol)
+                        buffer.latest_ticker = await self._fetch_ticker(symbol)
+                    
+                    await asyncio.sleep(5)  # Collect every 5 seconds
+                    
+                except Exception as e:
+                    logger.error(f"Error in real-time collection loop for {symbol}: {e}", exc_info=True)
+                    logger.info(f"Continuing real-time collection for {symbol} after error.")
+                    await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            logger.warning(f"Real-time collection task for {symbol} was cancelled.")
+        finally:
+            logger.critical(f"CRITICAL: Real-time collection task for {symbol} has exited its while True loop.")
     
     def _aggregate_trade(self, buffer: MinuteAggregation, trade: Dict):
         """Aggregate a trade into the minute buffer"""
@@ -206,7 +217,7 @@ class UnifiedCollector1M:
     async def _fetch_orderbook_snapshot(self, symbol: str) -> Optional[Dict]:
         """Fetch orderbook snapshot for aggregation"""
         try:
-            orderbook = self.exchange.fetchOrderBook(symbol, 20)
+            orderbook = await self.exchange.fetch_order_book(symbol, 20)
             return {
                 "bids": orderbook['bids'][:20],
                 "asks": orderbook['asks'][:20],
@@ -219,7 +230,7 @@ class UnifiedCollector1M:
     async def _fetch_recent_trades_for_aggregation(self, symbol: str) -> List[Dict]:
         """Fetch recent trades for aggregation"""
         try:
-            trades = self.exchange.fetchTrades(symbol, limit=50)
+            trades = await self.exchange.fetch_trades(symbol, limit=50)
             return [
                 {
                     "price": trade['price'],
@@ -236,29 +247,30 @@ class UnifiedCollector1M:
     async def _fetch_funding_rate(self, symbol: str) -> Dict:
         """Fetch current funding rate data"""
         try:
-            current_funding = self.exchange.fetchFundingRate(symbol)
+            current_funding = await self.exchange.fetch_funding_rate(symbol)
             
             # Enhanced funding data from Binance API
             url = "https://fapi.binance.com/fapi/v1/premiumIndex"
             symbol_clean = symbol.replace('/', '').replace(':USDT', '')
-            response = requests.get(url, params={"symbol": symbol_clean}, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "current_rate": current_funding['fundingRate'],
-                    "current_timestamp": current_funding['fundingTimestamp'],
-                    "next_timestamp": current_funding['fundingTimestamp'] + 8 * 60 * 60 * 1000,
-                    "mark_price": float(data.get('markPrice', 0)),
-                    "index_price": float(data.get('indexPrice', 0)),
-                    "estimated_settle_price": float(data.get('estimatedSettlePrice', 0))
-                }
-            else:
-                return {
-                    "current_rate": current_funding['fundingRate'],
-                    "current_timestamp": current_funding['fundingTimestamp'],
-                    "next_timestamp": current_funding['fundingTimestamp'] + 8 * 60 * 60 * 1000
-                }
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params={"symbol": symbol_clean}, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return {
+                            "current_rate": current_funding['fundingRate'],
+                            "current_timestamp": current_funding['fundingTimestamp'],
+                            "next_timestamp": current_funding['fundingTimestamp'] + 8 * 60 * 60 * 1000,
+                            "mark_price": float(data.get('markPrice', 0)),
+                            "index_price": float(data.get('indexPrice', 0)),
+                            "estimated_settle_price": float(data.get('estimatedSettlePrice', 0))
+                        }
+                    else:
+                        logger.warning(f"Failed to fetch premium index for {symbol}. Status: {response.status}, Response: {await response.text()}")
+                        return {
+                            "current_rate": current_funding['fundingRate'],
+                            "current_timestamp": current_funding['fundingTimestamp'],
+                            "next_timestamp": current_funding['fundingTimestamp'] + 8 * 60 * 60 * 1000
+                        }
                 
         except Exception as e:
             logger.warning(f"Failed to fetch funding rate for {symbol}: {e}")
@@ -271,69 +283,58 @@ class UnifiedCollector1M:
             base_url = "https://fapi.binance.com"
             ratios = {}
             
-            # Global long/short account ratio (5m period - 1m not supported)
-            try:
-                url = f"{base_url}/futures/data/globalLongShortAccountRatio"
-                response = requests.get(url, params={
-                    "symbol": symbol_clean,
-                    "period": "5m",
-                    "limit": 1
-                }, timeout=10)
+            async with aiohttp.ClientSession() as session:
+                # Global long/short account ratio (5m period - 1m not supported)
+                try:
+                    url = f"{base_url}/futures/data/globalLongShortAccountRatio"
+                    params = {"symbol": symbol_clean, "period": "5m", "limit": 1}
+                    async with session.get(url, params=params, timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data:
+                                ratios['global_account_ratio'] = {
+                                    "longShortRatio": float(data[0]['longShortRatio']),
+                                    "longAccount": float(data[0]['longAccount']),
+                                    "shortAccount": float(data[0]['shortAccount']),
+                                    "timestamp": int(data[0]['timestamp'])
+                                }
+                except Exception as e:
+                    logger.debug(f"Failed to fetch global account ratio for {symbol}: {e}")
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    if data:
-                        ratios['global_account_ratio'] = {
-                            "longShortRatio": float(data[0]['longShortRatio']),
-                            "longAccount": float(data[0]['longAccount']),
-                            "shortAccount": float(data[0]['shortAccount']),
-                            "timestamp": int(data[0]['timestamp'])
-                        }
-            except Exception as e:
-                logger.debug(f"Failed to fetch global account ratio for {symbol}: {e}")
-            
-            # Top trader long/short ratio (5m period - 1m not supported)
-            try:
-                url = f"{base_url}/futures/data/topLongShortAccountRatio"
-                response = requests.get(url, params={
-                    "symbol": symbol_clean,
-                    "period": "5m",
-                    "limit": 1
-                }, timeout=10)
+                # Top trader long/short ratio (5m period - 1m not supported)
+                try:
+                    url = f"{base_url}/futures/data/topLongShortAccountRatio"
+                    params = {"symbol": symbol_clean, "period": "5m", "limit": 1}
+                    async with session.get(url, params=params, timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data:
+                                ratios['top_trader_ratio'] = {
+                                    "longShortRatio": float(data[0]['longShortRatio']),
+                                    "longAccount": float(data[0]['longAccount']),
+                                    "shortAccount": float(data[0]['shortAccount']),
+                                    "timestamp": int(data[0]['timestamp'])
+                                }
+                except Exception as e:
+                    logger.debug(f"Failed to fetch top trader ratio for {symbol}: {e}")
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    if data:
-                        ratios['top_trader_ratio'] = {
-                            "longShortRatio": float(data[0]['longShortRatio']),
-                            "longAccount": float(data[0]['longAccount']),
-                            "shortAccount": float(data[0]['shortAccount']),
-                            "timestamp": int(data[0]['timestamp'])
-                        }
-            except Exception as e:
-                logger.debug(f"Failed to fetch top trader ratio for {symbol}: {e}")
-            
-            # Top position long/short ratio (5m period - 1m not supported)
-            try:
-                url = f"{base_url}/futures/data/topLongShortPositionRatio"
-                response = requests.get(url, params={
-                    "symbol": symbol_clean,
-                    "period": "5m",
-                    "limit": 1
-                }, timeout=10)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if data:
-                        ratios['top_position_ratio'] = {
-                            "longShortRatio": float(data[0]['longShortRatio']),
-                            "longPosition": float(data[0]['longPosition']),
-                            "shortPosition": float(data[0]['shortPosition']),
-                            "timestamp": int(data[0]['timestamp'])
-                        }
-            except Exception as e:
-                logger.debug(f"Failed to fetch top position ratio for {symbol}: {e}")
-                
+                # Top position long/short ratio (5m period - 1m not supported)
+                try:
+                    url = f"{base_url}/futures/data/topLongShortPositionRatio"
+                    params = {"symbol": symbol_clean, "period": "5m", "limit": 1}
+                    async with session.get(url, params=params, timeout=10) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data:
+                                ratios['top_position_ratio'] = {
+                                    "longShortRatio": float(data[0]['longShortRatio']),
+                                    "longPosition": float(data[0]['longPosition']),
+                                    "shortPosition": float(data[0]['shortPosition']),
+                                    "timestamp": int(data[0]['timestamp'])
+                                }
+                except Exception as e:
+                    logger.debug(f"Failed to fetch top position ratio for {symbol}: {e}")
+                    
             return ratios
             
         except Exception as e:
@@ -343,7 +344,7 @@ class UnifiedCollector1M:
     async def _fetch_ticker(self, symbol: str) -> Dict:
         """Fetch 24hr ticker statistics"""
         try:
-            ticker = self.exchange.fetchTicker(symbol)
+            ticker = await self.exchange.fetch_ticker(symbol)
             return {
                 "open": ticker['open'],
                 "high": ticker['high'],
@@ -365,17 +366,17 @@ class UnifiedCollector1M:
             symbol_clean = symbol.replace('/', '').replace(':USDT', '')
             
             url = "https://fapi.binance.com/fapi/v1/openInterest"
-            response = requests.get(url, params={"symbol": symbol_clean}, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "open_interest": float(data.get('openInterest', 0)),
-                    "timestamp": int(data.get('time', int(time.time() * 1000)))
-                }
-            else:
-                logger.warning(f"Open interest API returned status {response.status_code} for symbol {symbol_clean}")
-                return {}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params={"symbol": symbol_clean}, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return {
+                            "open_interest": float(data.get('openInterest', 0)),
+                            "timestamp": int(data.get('time', int(time.time() * 1000)))
+                        }
+                    else:
+                        logger.warning(f"Open interest API returned status {response.status} for symbol {symbol_clean}")
+                        return {}
                 
         except Exception as e:
             logger.warning(f"Failed to fetch open interest for {symbol}: {e}")
@@ -485,7 +486,7 @@ class UnifiedCollector1M:
             
             logger.debug(f"Generating 1-minute aggregated data for {symbol}")
             # Get OHLCV for the minute (this is already 1-minute from exchange)
-            ohlcv = self.exchange.fetchOHLCV(symbol, '1m', limit=1)
+            ohlcv = await self.exchange.fetch_ohlcv(symbol, '1m', limit=1)
             current_minute_candle = ohlcv[-1] if ohlcv else None
             
             # Aggregate orderbook metrics
@@ -497,8 +498,8 @@ class UnifiedCollector1M:
             # Create aggregated document
             aggregated_data = {
                 "symbol": symbol,
-                "timestamp": buffer.minute_start,
-                "minute_end": buffer.minute_start + 60000,  # +1 minute
+                "timestamp": datetime.utcfromtimestamp(buffer.minute_start / 1000),
+                "minute_end": datetime.utcfromtimestamp((buffer.minute_start + 60000) / 1000),  # +1 minute
                 "slave_id": self.slave_id,
                 "collection_type": "unified_market_data_1m",
                 
@@ -544,19 +545,23 @@ class UnifiedCollector1M:
             return None
     
     async def store_aggregated_data(self, symbol: str, data: Dict):
-        """Store 1-minute aggregated data to MongoDB"""
+        """Store 1-minute aggregated data to MongoDB using upsert"""
         if not self.mongo_available:
             logger.debug("MongoDB not available, skipping storage")
             return
         
         logger.debug(f"Attempting to store aggregated data for {symbol} to MongoDB")
         try:
-            collection_name = f"{symbol.replace('/', '').replace(':USDT', '')}_1m_aggregated"
+            collection_name = symbol.replace('/', '').replace(':USDT', '')
             collection = self.db[collection_name]
             
-            # Insert the aggregated data
-            result = collection.insert_one(data)
-            logger.info(f"Stored 1-minute aggregated data for {symbol}: {result.inserted_id}")
+            # Use update_one with upsert=True to merge data
+            result = collection.update_one(
+                {"timestamp": data["timestamp"], "symbol": data["symbol"]},
+                {"$set": data},
+                upsert=True
+            )
+            logger.info(f"Stored 1-minute aggregated data for {symbol}: matched={result.matched_count}, modified={result.modified_count}, upserted_id={result.upserted_id}")
             
         except Exception as e:
             logger.error(f"Failed to store aggregated data for {symbol}: {e}")
@@ -565,58 +570,78 @@ class UnifiedCollector1M:
         """Run the 1-minute aggregation cycle for all symbols"""
         try:
             logger.info("Starting 1-minute aggregation cycle")
+            logger.info(f"Processing {len(self.config.symbols)} symbols in this cycle.")
             
-            for symbol in self.config.symbols:
+            for i, symbol in enumerate(self.config.symbols):
+                logger.info(f"--- Aggregation cycle for symbol {i+1}/{len(self.config.symbols)}: {symbol} ---")
                 try:
                     # Generate aggregated data for the completed minute
                     aggregated_data = await self.generate_1m_aggregated_data(symbol)
                     
                     if aggregated_data:
+                        logger.info(f"Successfully generated aggregated data for {symbol}. Storing to MongoDB...")
                         # Store to MongoDB
                         await self.store_aggregated_data(symbol, aggregated_data)
                         
                         logger.info(f"Completed 1-minute aggregation for {symbol}")
+                    else:
+                        logger.warning(f"Failed to generate aggregated data for {symbol}, it was None.")
                     
                 except Exception as e:
-                    logger.error(f"Error in 1-minute aggregation for {symbol}: {e}")
+                    logger.error(f"Error in 1-minute aggregation for {symbol}: {e}", exc_info=True)
             
             logger.info("Completed 1-minute aggregation cycle")
             
         except Exception as e:
-            logger.error(f"Error in 1-minute aggregation cycle: {e}")
+            logger.error(f"Error in 1-minute aggregation cycle: {e}", exc_info=True)
     
     async def start_continuous_collection(self):
         """Start continuous data collection with 1-minute aggregation"""
         try:
-            logger.info("Starting continuous 1-minute aggregated collection")
+            logger.info("--- Entering start_continuous_collection ---")
             
             # Start real-time data collection tasks for each symbol
             tasks = []
+            logger.info(f"Found {len(self.config.symbols)} symbols to create collection tasks for.")
             for symbol in self.config.symbols:
                 task = asyncio.create_task(self.collect_real_time_data(symbol))
                 tasks.append(task)
+            logger.info(f"Created {len(tasks)} real-time collection tasks.")
             
             # Start the aggregation cycle (runs every minute)
             async def aggregation_scheduler():
-                while True:
-                    # Wait until the next minute boundary
-                    now = datetime.utcnow()
-                    next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
-                    wait_seconds = (next_minute - now).total_seconds()
-                    
-                    await asyncio.sleep(wait_seconds)
-                    
-                    # Run aggregation for the completed minute
-                    await self.run_1m_aggregation_cycle()
+                logger.info("Aggregation scheduler task started.")
+                try:
+                    while True:
+                        # Wait until the next minute boundary
+                        now = datetime.utcnow()
+                        next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+                        wait_seconds = (next_minute - now).total_seconds()
+                        
+                        logger.info(f"Aggregation scheduler: waiting {wait_seconds:.2f} seconds until next minute.")
+                        await asyncio.sleep(wait_seconds)
+                        
+                        # Run aggregation for the completed minute
+                        logger.info("Aggregation scheduler: starting aggregation cycle.")
+                        await self.run_1m_aggregation_cycle()
+                except asyncio.CancelledError:
+                    logger.warning("Aggregation scheduler task was cancelled.")
+                except Exception as e:
+                    logger.error(f"CRITICAL: Aggregation scheduler loop failed: {e}", exc_info=True)
+
             
             aggregation_task = asyncio.create_task(aggregation_scheduler())
             tasks.append(aggregation_task)
+            logger.info("Created aggregation scheduler task.")
             
+            logger.info(f"Passing {len(tasks)} tasks to asyncio.gather().")
             # Run all tasks concurrently
             await asyncio.gather(*tasks)
             
+            logger.critical("CRITICAL: asyncio.gather() in start_continuous_collection has completed. This should not happen.")
+            
         except Exception as e:
-            logger.error(f"Error in continuous collection: {e}")
+            logger.error(f"Error in continuous collection: {e}", exc_info=True)
             raise
 
 async def main():

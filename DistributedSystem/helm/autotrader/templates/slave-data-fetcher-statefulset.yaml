@@ -30,15 +30,45 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       volumes:
+      - name: config
+        emptyDir: {}
       {{- range $i, $e := until (int .Values.slave.replicaCount) }}
-        - name: symbols-config-{{ $i }}
-          configMap:
-            name: {{ include "autotrader.fullname" $ }}-slave-symbols-{{ $i }}
+      - name: symbols-config-{{ $i }}
+        configMap:
+          name: {{ include "autotrader.fullname" $ }}-slave-symbols-{{ $i }}
       {{- end }}
+      initContainers:
+        - name: copy-symbols
+          image: busybox
+          command:
+            - /bin/sh
+            - -c
+            - |
+              POD_ORDINAL=$((${HOSTNAME##*-}))
+              cp /config-templates/${POD_ORDINAL}/symbols.csv /config/symbols.csv
+          volumeMounts:
+          - name: config
+            mountPath: /config
+          {{- range $i, $e := until (int .Values.slave.replicaCount) }}
+          - name: symbols-config-{{ $i }}
+            mountPath: /config-templates/{{ $i }}
+          {{- end }}
       containers:
         - name: data-fetcher
           image: "{{ .Values.slave.image.data_fetcher.repository }}:{{ .Values.slave.image.data_fetcher.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.slave.image.data_fetcher.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              SYMBOLS_FILE="/config/symbols.csv"
+              if [ -f "$SYMBOLS_FILE" ]; then
+                export SYMBOLS=$(cat "$SYMBOLS_FILE" | tr -d '[:space:]')
+              else
+                echo "Error: Symbols file not found at $SYMBOLS_FILE"
+                exit 1
+              fi
+              exec python3 run_unified_collector.py
           env:
             - name: POD_NAME
               valueFrom:
@@ -61,12 +91,9 @@ spec:
               value: {{ .Values.slave.env.TEST_MODE | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.slave.env.LOG_LEVEL | quote }}
-
           volumeMounts:
-          {{- range $i, $e := until (int .Values.slave.replicaCount) }}
-            - name: symbols-config-{{ $i }}
-              mountPath: /config/{{ $i }}
-          {{- end }}
+          - name: config
+            mountPath: /config
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

@@ -57,20 +57,32 @@ def get_slave_replica_count(apps_v1_api) -> int:
         sys.exit(1)
 
 def fetch_binance_usdt_futures_symbols():
-    """Fetches all USDT-margined futures symbols from Binance."""
-    logging.info("Fetching USDT futures symbols from Binance...")
+    """
+    Fetches the top 300 USDT-margined futures symbols by 24h volume from Binance.
+    """
+    logging.info("Fetching top 300 USDT futures symbols by 24h volume from Binance...")
     try:
         exchange = ccxt.binance({'options': {'defaultType': 'future'}})
-        markets = exchange.load_markets()
-        symbols = [
-            market['symbol']
-            for market in markets.values()
-            if market['quote'] == 'USDT' and market.get('active', True)
+        
+        # Fetch all tickers for futures
+        tickers = exchange.fetch_tickers()
+
+        # Filter for USDT-margined futures and sort by 24h volume
+        usdt_futures = [
+            ticker for ticker in tickers.values()
+            if 'USDT' in ticker['symbol'] and 'quoteVolume' in ticker and ticker['quoteVolume'] is not None
         ]
+        
+        # Sort by quoteVolume in descending order
+        sorted_futures = sorted(usdt_futures, key=lambda x: x['quoteVolume'], reverse=True)
+        
+        # Get the symbols of the top 300
+        symbols = [market['symbol'] for market in sorted_futures[:300]]
+        
         logging.info(f"Successfully fetched {len(symbols)} active USDT futures symbols.")
-        return sorted(symbols)
+        return sorted(list(set(symbols))) # Keep the set for safety
     except Exception as e:
-        logging.error(f"Failed to fetch symbols from Binance: {e}")
+        logging.error(f"Failed to fetch symbols from Binance: {e}", exc_info=True)
         sys.exit(1)
 
 def distribute_symbols(symbols, num_slaves):

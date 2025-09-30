@@ -60,20 +60,11 @@ class DistributedWebSocketController(ABC):
         self.db = self.client[mongo_db_name]
 
         # Symbol configuration for distributed system
-        symbols_env = os.getenv("SYMBOLS")
         if symbols_env:
             self.symbols = [s.strip() for s in symbols_env.split(',') if s.strip()]
             logger.info(f"Loaded {len(self.symbols)} symbols from SYMBOLS env var")
         else:
-            symbols_file_path = os.getenv("SYMBOLS_FILE_PATH")
-            if not symbols_file_path:
-                hostname = os.getenv("HOSTNAME")
-                if hostname:
-                    pod_index = hostname.split('-')[-1]
-                    symbols_file_path = f"/config/{pod_index}/symbols.csv"
-                else:
-                    self.symbols = []
-            
+            symbols_file_path = os.getenv("SYMBOLS_FILE_PATH", "/config/symbols.csv") # Default to /config/symbols.csv
             if symbols_file_path:
                 try:
                     with open(symbols_file_path, 'r') as f:

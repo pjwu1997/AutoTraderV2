@@ -25,9 +25,9 @@ fi
 echo "Building and pushing images for user: $DOCKERHUB_USERNAME with tag: $TAG"
 
 # Build and push Master image
-echo "Building master image..."
-docker buildx build --platform linux/amd64 -t ${DOCKERHUB_USERNAME}/autotrader-master:${TAG} -f MasterVM/Dockerfile . --load
-docker push ${DOCKERHUB_USERNAME}/autotrader-master:${TAG}
+#echo "Building master image..."
+#docker buildx build --platform linux/amd64 -t ${DOCKERHUB_USERNAME}/autotrader-master:${TAG} -f MasterVM/Dockerfile . --load
+#docker push ${DOCKERHUB_USERNAME}/autotrader-master:${TAG}
 
 # Build and push Data Fetcher image
 echo "Building data-fetcher image..."
@@ -45,9 +45,9 @@ docker buildx build --platform linux/amd64 -t ${DOCKERHUB_USERNAME}/autotrader-l
 docker push ${DOCKERHUB_USERNAME}/autotrader-liquidation-websocket:${TAG}
 
 # Build and push Health Checker image
-echo "Building health-checker image..."
-docker buildx build --platform linux/amd64 -t ${DOCKERHUB_USERNAME}/autotrader-health-checker:${TAG} -f SlaveVM/health_checker/Dockerfile . --load
-docker push ${DOCKERHUB_USERNAME}/autotrader-health-checker:${TAG}
+#echo "Building health-checker image..."
+#docker buildx build --platform linux/amd64 -t ${DOCKERHUB_USERNAME}/autotrader-health-checker:${TAG} -f SlaveVM/health_checker/Dockerfile . --load
+#docker push ${DOCKERHUB_USERNAME}/autotrader-health-checker:${TAG}
 
 # Build and push Config Updater image
 echo "Building config-updater image..."

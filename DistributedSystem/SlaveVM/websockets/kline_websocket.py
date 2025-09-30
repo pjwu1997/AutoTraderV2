@@ -188,8 +188,7 @@ async def main():
     if not hostname:
         logger.error("HOSTNAME environment variable not set.")
         sys.exit(1)
-    pod_index = hostname.split('-')[-1]
-    symbols_file_path = f"/config/{pod_index}/symbols.csv"
+    symbols_file_path = f"/config/symbols.csv"
 
     try:
         with open(symbols_file_path, 'r') as f:

@@ -79,7 +79,13 @@ nodeSelector: {}
 
 tolerations: []
 
-affinity: {}
+affinity: 
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node-role.kubernetes.io/control-plane
+          operator: DoesNotExist
 
 master:
   replicaCount: 1
@@ -118,14 +124,6 @@ slave:
   env:
     TEST_MODE: "false"
     LOG_LEVEL: "DEBUG"
-
-mongodb:
-  # If enabled is false, you must provide connection details for an external MongoDB.
-  enabled: false
-  uri: "mongodb://10.0.1.100:27017/"
-  root:
-    user: "admin"
-    password: "pnhdf6%AtXHr9na"
 
 cronjob:
   enabled: true
